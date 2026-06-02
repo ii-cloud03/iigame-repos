@@ -1,127 +1,78 @@
 const express = require("express");
 
+const WebSocket =
+    require("ws");
+
+const http =
+    require("http");
+
 const app = express();
 
-app.use(express.json());
+const server =
+    http.createServer(app);
+
+const wss =
+    new WebSocket.Server({
+        server
+    });
 
 let rooms = {};
 
-app.get("/", (req, res) => {
-    res.send("TicTacToe Server Online");
-});
+function createBoard()
+{
+    return [
+        "", "", "",
+        "", "", "",
+        "", "", ""
+    ];
+}
 
-app.post("/create-room", (req, res) => {
+function createRoom()
+{
+    return {
 
-    const roomId = Math.random()
-        .toString(36)
-        .substring(2, 8);
-
-    rooms[roomId] = {
-
-        board: [
-            "", "", "",
-            "", "", "",
-            "", "", ""
-        ],
+        board: createBoard(),
 
         turn: "X",
 
-        players: 1,
+        winner: "",
 
-        winner: ""
+        players: []
     };
+}
 
-    res.json({
-        success: true,
-        roomId: roomId,
-        symbol: "X"
-    });
-});
-
-app.post("/join-room", (req, res) => {
-
-    const { roomId } = req.body;
-
+function broadcast(roomId)
+{
     const room = rooms[roomId];
 
-    if (!room) {
-        return res.json({
-            success: false
-        });
-    }
+    if (!room)
+        return;
 
-    if (room.players >= 2) {
-        return res.json({
-            success: false
-        });
-    }
+    const data = JSON.stringify({
 
-    room.players++;
+        type: "state",
 
-    res.json({
-        success: true,
-        symbol: "O"
+        board: room.board,
+
+        turn: room.turn,
+
+        winner: room.winner
     });
-});
 
-app.post("/make-move", (req, res) => {
+    room.players.forEach(p => {
 
-    const {
-        roomId,
-        index,
-        symbol
-    } = req.body;
-
-    const room = rooms[roomId];
-
-    if (!room) {
-        return res.json({
-            success: false
-        });
-    }
-
-    if (room.board[index] !== "") {
-        return res.json({
-            success: false
-        });
-    }
-
-    if (room.turn !== symbol) {
-        return res.json({
-            success: false
-        });
-    }
-
-    room.board[index] = symbol;
-
-    room.turn = symbol === "X"
-        ? "O"
-        : "X";
-
-    checkWinner(room);
-
-    res.json({
-        success: true
+        if (
+            p.ws.readyState ===
+            WebSocket.OPEN
+        )
+        {
+            p.ws.send(data);
+        }
     });
-});
+}
 
-app.post("/state", (req, res) => {
-
-    const { roomId } = req.body;
-
-    const room = rooms[roomId];
-
-    if (!room) {
-        return res.json({
-            success: false
-        });
-    }
-
-    res.json(room);
-});
-
-function checkWinner(room) {
-
+function checkWinner(room)
+{
     const b = room.board;
 
     const wins = [
@@ -138,24 +89,204 @@ function checkWinner(room) {
         [2,4,6]
     ];
 
-    for (let w of wins) {
-
+    for (let w of wins)
+    {
         const a = w[0];
         const b1 = w[1];
         const c = w[2];
 
         if (
-            room.board[a] !== "" &&
-            room.board[a] === room.board[b1] &&
-            room.board[a] === room.board[c]
-        ) {
-            room.winner = room.board[a];
+            b[a] !== "" &&
+            b[a] === b[b1] &&
+            b[a] === b[c]
+        )
+        {
+            room.winner = b[a];
         }
+    }
+
+    let draw = true;
+
+    for (let c of room.board)
+    {
+        if (c === "")
+        {
+            draw = false;
+        }
+    }
+
+    if (
+        draw &&
+        room.winner === ""
+    )
+    {
+        room.winner = "DRAW";
     }
 }
 
-const PORT = process.env.PORT || 3000;
+wss.on("connection", ws => {
 
-app.listen(PORT, () => {
+    ws.on("message", message => {
+
+        try
+        {
+            const data =
+                JSON.parse(message);
+
+            if (data.type === "create")
+            {
+                const roomId =
+                    Math.random()
+                    .toString(36)
+                    .substring(2, 8);
+
+                rooms[roomId] =
+                    createRoom();
+
+                rooms[roomId]
+                    .players.push({
+
+                    ws: ws,
+
+                    symbol: "X"
+                });
+
+                ws.send(JSON.stringify({
+
+                    type: "created",
+
+                    roomId: roomId,
+
+                    symbol: "X"
+                }));
+            }
+
+            else if (
+                data.type === "join"
+            )
+            {
+                const room =
+                    rooms[data.roomId];
+
+                if (!room)
+                {
+                    ws.send(JSON.stringify({
+
+                        type: "error",
+
+                        message:
+                        "Room not found"
+                    }));
+
+                    return;
+                }
+
+                if (
+                    room.players.length >= 2
+                )
+                {
+                    ws.send(JSON.stringify({
+
+                        type: "error",
+
+                        message:
+                        "Room full"
+                    }));
+
+                    return;
+                }
+
+                room.players.push({
+
+                    ws: ws,
+
+                    symbol: "O"
+                });
+
+                ws.send(JSON.stringify({
+
+                    type: "joined",
+
+                    symbol: "O"
+                }));
+
+                broadcast(data.roomId);
+            }
+
+            else if (
+                data.type === "move"
+            )
+            {
+                const room =
+                    rooms[data.roomId];
+
+                if (!room)
+                    return;
+
+                if (
+                    room.turn !==
+                    data.symbol
+                )
+                    return;
+
+                if (
+                    room.board[data.index]
+                    !== ""
+                )
+                    return;
+
+                if (
+                    room.winner !== ""
+                )
+                    return;
+
+                room.board[data.index] =
+                    data.symbol;
+
+                room.turn =
+                    data.symbol === "X"
+                    ? "O"
+                    : "X";
+
+                checkWinner(room);
+
+                broadcast(data.roomId);
+            }
+
+            else if (
+                data.type === "restart"
+            )
+            {
+                const room =
+                    rooms[data.roomId];
+
+                if (!room)
+                    return;
+
+                room.board =
+                    createBoard();
+
+                room.turn = "X";
+
+                room.winner = "";
+
+                broadcast(data.roomId);
+            }
+        }
+        catch
+        {
+
+        }
+    });
+});
+
+app.get("/", (req, res) => {
+    res.send("Realtime Server");
+});
+
+const PORT =
+    process.env.PORT || 3000;
+
+server.listen(PORT, () => {
     console.log("Server started");
 });
