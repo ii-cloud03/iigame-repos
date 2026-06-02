@@ -151,6 +151,9 @@ wss.on("connection", ws => {
                     symbol: "X"
                 });
 
+                ws.symbol = "X"; // ad
+                ws.roomId = roomId; // a
+                
                 ws.send(JSON.stringify({
 
                     type: "created",
@@ -159,6 +162,8 @@ wss.on("connection", ws => {
 
                     symbol: "X"
                 }));
+
+                broadcast(roomId); // add
             }
 
             else if (
