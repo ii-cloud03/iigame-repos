@@ -208,6 +208,9 @@ wss.on("connection", ws => {
                     symbol: "O"
                 });
 
+                ws.symbol = "O"; // a
+                ws.roomId = data.roomId; // a
+                
                 ws.send(JSON.stringify({
 
                     type: "joined",
