@@ -181,6 +181,18 @@ wss.on("connection", ws => {
                 broadcast(data.roomId);
             }
                 
+            else if (data.type === "chat") {
+                const room = rooms[data.roomId];
+                if (!room) return;
+                const msg = JSON.stringify({type: "chat", symbol: data.symbol, message: data.message});
+                
+                room.players.forEach(p => {
+                    if (p.ws.readyState === WebSocket.OPEN) {
+                        p.ws.send(msg);
+                    }
+                });
+            }
+                
             else if (data.type === "restart") {
                 const room = rooms[data.roomId];
 
