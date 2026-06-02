@@ -185,11 +185,10 @@ wss.on("connection", ws => {
                 const room = rooms[data.roomId];
 
                 if (!room) return;
-
+                if (room.winner === "") return;
+                
                 room.board = createBoard();
-
                 room.turn = "X";
-
                 room.winner = "";
 
                 broadcast(data.roomId);
