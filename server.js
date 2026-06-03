@@ -186,7 +186,7 @@ wss.on("connection", ws => {
                 if (!room) return;
 
                 room.players.forEach(p => {
-                    if (p.ws.readyState === WebSocket.OPEN) {
+                    if (p.ws !== ws && p.ws.readyState === WebSocket.OPEN) {
                         p.ws.send(JSON.stringify({type: "rematch_request"}));
                     }
                 });
