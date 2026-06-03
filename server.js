@@ -180,6 +180,17 @@ wss.on("connection", ws => {
             
                 broadcast(data.roomId);
             }
+
+            else if (data.type === "rematch_request") {
+                const room = rooms[data.roomId];
+                if (!room) return;
+
+                room.players.forEach(p => {
+                    if (p.ws.readyState === WebSocket.OPEN) {
+                        p.ws.send(JSON.stringify({type: "rematch_request"}));
+                    }
+                });
+            }
                 
             else if (data.type === "chat") {
                 const room = rooms[data.roomId];
