@@ -32,6 +32,18 @@ function createRoom() {
     };
 }
 
+function broadcastOnlineCount()
+{
+    const online = wss.clients.size;
+    const msg = JSON.stringify({type: "online", count: online});
+
+    wss.clients.forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(msg);
+        }
+    });
+}
+
 function broadcast(roomId) {
     const room = rooms[roomId];
 
@@ -91,9 +103,8 @@ function checkWinner(room) {
 }
 
 wss.on("connection", ws => {
-
+    broadcastOnlineCount();
     ws.on("message", message => {
-
         try {
             const data = JSON.parse(message);
 
@@ -154,6 +165,21 @@ wss.on("connection", ws => {
                 checkWinner(room);
 
                 broadcast(data.roomId);
+            }
+
+            else if (data.type === "typing") {
+                const room = rooms[data.roomId];
+                if (!room) return;
+
+                room.players.forEach(p => {
+                    if (p.ws !== ws && p.ws.readyState === WebSocket.OPEN) {
+                        p.ws.send(JSON.stringify({type: "typing"}));
+                    }
+                });
+            }
+
+            else if (data.type === "ping") {
+                ws.send(JSON.stringify({type: "pong"}));
             }
 
             else if (data.type === "reconnect") {
@@ -220,6 +246,11 @@ wss.on("connection", ws => {
         catch {
 
         }
+    });
+
+    ws.on("close", () => {
+        broadcastOnlineCount();
+        // console.log("Client disconnected");
     });
 });
 
