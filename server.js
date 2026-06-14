@@ -16,9 +16,7 @@ let rooms = {};
 
 const fs = require("fs");
 
-let db = {
-    users: []
-};
+let db;
 
 if (fs.existsSync("users.json"))
 {
@@ -28,6 +26,12 @@ if (fs.existsSync("users.json"))
             "utf8"
         )
     );
+}
+else
+{
+    db = {
+        users: []
+    };
 }
 
 const onlineUsers = new Map();
@@ -152,6 +156,7 @@ wss.on("connection", ws => {
                 db.users.push({
                     username: data.username, 
                     password: data.password,
+                    email: data.email, // 
                     rating: 1000,
                     wins: 0,
                     losses: 0,
