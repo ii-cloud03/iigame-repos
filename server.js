@@ -17,11 +17,9 @@ let rooms = {};
 // firebase ***
 const admin = require("firebase-admin");
 
-const serviceAccount =
-    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
-serviceAccount.private_key =
-    serviceAccount.private_key.replace(/\\n/g, '\n');
+serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
@@ -30,39 +28,12 @@ admin.initializeApp({
 
 const dbFirebase = admin.database();
 
-dbFirebase.ref("test").set({
-    message: "Hello Firebase"
-})
+dbFirebase.ref("test").set({ message: "Hello Firebase"})
 .then(() => console.log("Firebase OK"))
 .catch(err => console.log("Firebase Error:", err));
-
 //// firebase ///
-const fs = require("fs");
-
-let db;
-
-if (fs.existsSync("users.json"))
-{
-    db = JSON.parse(
-        fs.readFileSync(
-            "users.json",
-            "utf8"
-        )
-    );
-}
-else
-{
-    db = {
-        users: []
-    };
-}
 
 const onlineUsers = new Map();
-
-function SaveUsers()
-{
-    fs.writeFileSync("users.json", JSON.stringify(db, null, 4));
-}
 
 function IsValidUsername(username)
 {
@@ -159,7 +130,7 @@ function checkWinner(room) {
 
 wss.on("connection", ws => {
     broadcastOnlineCount();
-    ws.on("message", message => {
+    ws.on("message", async message => {
         try {
             const data = JSON.parse(message);
 
@@ -169,14 +140,15 @@ wss.on("connection", ws => {
                     return;
                 }
 
-                const exists = db.users.find(u => u.username.toLowerCase() === data.username.toLowerCase());
+                const username = data.username.toLowerCase();
+                const snap = await dbFirebase.ref("users/" + username).once("value");
 
-                if(exists) {
+                if(snap.exists()) {
                     ws.send(JSON.stringify({type: "register_failed", message: "Username already exists"}));
                     return;
                 }
 
-                db.users.push({
+                await dbFirebase.ref("users/" + username).set({
                     username: data.username, 
                     password: data.password,
                     email: data.email, // 
@@ -189,21 +161,22 @@ wss.on("connection", ws => {
                     friends: []
                 });
 
-                SaveUsers();
-
                 ws.send(JSON.stringify({type: "register_success"}));
 
                 return;
             }
 
             else if (data.type === "login") {
-                const user = db.users.find(u => u.username.toLowerCase() === data.username.toLowerCase());
-
-                if(!user) {
+                const username = data.username.toLowerCase();
+                const snap = await dbFirebase.ref("users/" + username).once("value");
+                
+                if(!snap.exists()) {
                     ws.send(JSON.stringify({type: "login_failed", message: "User nout found"}));
                     return;
                 }
 
+                const user = snap.val();
+                
                 if(user.password !== data.password) {
                     ws.send(JSON.stringify({type: "login_failed", message: "Wrong password"}));
                     return;
