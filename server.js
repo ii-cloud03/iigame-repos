@@ -327,8 +327,11 @@ wss.on("connection", ws => {
                 broadcast(data.roomId);
             }
         }
-        catch {
-
+        catch (err) { // catch
+            /// a
+            console.log(err);
+            ws.send(JSON.stringify({type: "error", message: err.toString()}));
+            //
         }
     });
 
