@@ -14,6 +14,29 @@ const wss = new WebSocket.Server({
 
 let rooms = {};
 
+// firebase ***
+const admin = require("firebase-admin");
+
+const serviceAccount =
+    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+serviceAccount.private_key =
+    serviceAccount.private_key.replace(/\\n/g, '\n');
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: process.env.FIREBASE_DB_URL
+});
+
+const dbFirebase = admin.database();
+
+dbFirebase.ref("test").set({
+    message: "Hello Firebase"
+})
+.then(() => console.log("Firebase OK"))
+.catch(err => console.log("Firebase Error:", err));
+
+//// firebase ///
 const fs = require("fs");
 
 let db;
