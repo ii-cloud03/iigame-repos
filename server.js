@@ -4,6 +4,8 @@ const WebSocket = require("ws");
 
 const http = require("http");
 
+const bcrypt = require("bcryptjs"); ////
+
 const app = express();
 
 const server = http.createServer(app);
@@ -249,9 +251,11 @@ wss.on("connection", ws => {
                     return;
                 }
 
+                const hashedPassword = await bcrypt.hash(data.password, 10);
+
                 await dbFirebase.ref("users/" + username).set({
                     username: data.username, 
-                    password: data.password,
+                    password: hashedPassword,
                     email: data.email, // 
                     rating: 1000,
                     wins: 0,
@@ -276,9 +280,11 @@ wss.on("connection", ws => {
                     return;
                 }
 
-                const user = snap.val();
+                // const user = snap.val();
+
+                const ok = await bcrypt.compare(data.password, user.password);
                 
-                if(user.password !== data.password) {
+                if(!ok) { // user.password !== data.password
                     ws.send(JSON.stringify({type: "login_failed", message: "Wrong password"}));
                     return;
                 }
