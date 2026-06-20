@@ -281,7 +281,6 @@ wss.on("connection", ws => {
                 }
 
                 const user = snap.val();
-
                 const ok = await bcrypt.compare(data.password, user.password);
                 
                 if(!ok) { // user.password !== data.password
