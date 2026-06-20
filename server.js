@@ -4,7 +4,22 @@ const WebSocket = require("ws");
 
 const http = require("http");
 
+/////
 const bcrypt = require("bcryptjs"); ////
+const nodemailer = require("nodemailer");
+const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+        user:
+            process.env.MAIL_USER,
+        pass:
+            process.env.MAIL_PASS
+    }
+});
+function GenerateCode()
+{
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
 const app = express();
 
@@ -304,7 +319,48 @@ wss.on("connection", ws => {
 
                 return;
             }
-               
+
+            else if (data.type === "forgot_password")
+            {
+                const snap = await dbFirebase.ref("users").once("value");
+            
+                const users = snap.val();
+            
+                let foundUser = null;
+                let userKey = null;
+            
+                for (const key in users)
+                {
+                    if (users[key].email.toLowerCase() === data.email.toLowerCase())
+                    {
+                        foundUser = users[key];
+                        userKey = key;
+                        break;
+                    }
+                }
+            
+                if (!foundUser)
+                {
+                    ws.send(JSON.stringify({type: "forgot_failed"}));
+                    return;
+                }
+            
+                const code = GenerateCode();
+            
+                await dbFirebase.ref("users/" + userKey).update({
+                    resetCode: code, resetExpire: Date.now() + 10 * 60 * 1000
+                });
+            
+                await transporter.sendMail({
+                    from: process.env.MAIL_USER,
+                    to: foundUser.email,
+                    subject: "Password Reset",
+                    text: "Your code: " + code
+                });
+            
+                ws.send(JSON.stringify({type: "forgot_sent"}));
+            }
+            
             else if (data.type === "create") {
                 const roomId = Math.random().toString(36).substring(2, 8);
 
@@ -556,8 +612,19 @@ app.get("/", (req, res) => {
     res.send("Realtime Server");
 });
 
-const PORT =
-    process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
+
+// test
+transporter.sendMail({
+    from: process.env.MAIL_USER,
+    to: process.env.MAIL_USER,
+    subject: "SMTP Test",
+    text: "Email system is working"
+})
+.then(() => console.log("MAIL OK"))
+.catch(err => console.log("MAIL ERROR:", err));
+////
+
 
 server.listen(PORT, () => {
     console.log("Server started");
