@@ -615,6 +615,8 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 // test
+console.log("MAIL_USER =", process.env.MAIL_USER);
+console.log("MAIL_PASS = ", process.env.MAIL_PASS ? "FOUND" : "MISSING");
 console.log("Before mail test");
 transporter.sendMail({
     from: process.env.MAIL_USER,
