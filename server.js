@@ -128,6 +128,48 @@ function checkWinner(room) {
     }
 }
 
+/////
+async function UpdateStats(room)
+{
+    if (room.winner === "DRAW")
+    {
+        for (const p of room.players)
+        {
+            await dbFirebase.ref("users/" + p.username.toLowerCase()
+            ).update({
+                draws: admin.database.ServerValue.increment(1),
+                coins: admin.database.ServerValue.increment(5)
+            });
+        }
+
+        return;
+    }
+
+    const winner = room.players.find(p => p.symbol === room.winner);
+    const loser  = room.players.find(p => p.symbol !== room.winner);
+
+    if (winner)
+    {
+        await dbFirebase.ref("users/" + winner.username.toLowerCase()
+        ).update({
+            wins: admin.database.ServerValue.increment(1),
+            coins: admin.database.ServerValue.increment(10),
+            rating: admin.database.ServerValue.increment(25)
+        });
+    }
+
+    if (loser)
+    {
+        await dbFirebase.ref("users/" + loser.username.toLowerCase()
+        ).update({
+            losses: admin.database.ServerValue.increment(1),
+            coins: admin.database.ServerValue.increment(2),
+            rating: admin.database.ServerValue.increment(-10)
+        });
+    }
+}
+////
+
 wss.on("connection", ws => {
     broadcastOnlineCount();
     ws.on("message", async message => {
@@ -245,6 +287,11 @@ wss.on("connection", ws => {
 
                 checkWinner(room);
 
+                if (room.winner !== "")
+                {
+                    await UpdateStats(room);
+                }
+                
                 broadcast(data.roomId);
             }
 
