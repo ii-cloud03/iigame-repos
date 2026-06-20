@@ -15,6 +15,7 @@ const wss = new WebSocket.Server({
 });
 
 let rooms = {};
+let matchmakingQueue = [];
 
 // firebase ***
 const admin = require("firebase-admin");
@@ -346,6 +347,58 @@ wss.on("connection", ws => {
                 broadcast(data.roomId);
             }
 
+            else if (data.type === "find_match")
+            {
+                if (!ws.username) return;
+            
+                matchmakingQueue = matchmakingQueue.filter(p => p.ws !== ws);
+            
+                if (matchmakingQueue.length > 0)
+                {
+                    const opponent = matchmakingQueue.shift();
+            
+                    const roomId = Math.random().toString(36).substring(2, 8);
+            
+                    rooms[roomId] = createRoom();
+            
+                    rooms[roomId].players.push({ws: opponent.ws, username: opponent.username, symbol: "X"});
+                    rooms[roomId].players.push({ws: ws, username: ws.username, symbol: "O"});
+            
+                    opponent.ws.roomId = roomId;
+                    opponent.ws.symbol = "X";
+            
+                    ws.roomId = roomId;
+                    ws.symbol = "O";
+            
+                    opponent.ws.send(JSON.stringify({
+                        type: "match_found",
+                        roomId: roomId,
+                        symbol: "X",
+                        opponent: ws.username
+                    }));
+            
+                    ws.send(JSON.stringify({
+                        type: "match_found",
+                        roomId: roomId,
+                        symbol: "O",
+                        opponent: opponent.username
+                    }));
+            
+                    broadcast(roomId);
+                }
+                else
+                {
+                    matchmakingQueue.push({ws: ws, username: ws.username});
+            
+                    ws.send(JSON.stringify({type: "matchmaking"}));
+                }
+            }
+
+            else if (data.type === "cancel_matchmaking")
+            {
+                matchmakingQueue = matchmakingQueue.filter(p => p.ws !== ws);
+            }
+
             else if (data.type === "move") {
                 const room = rooms[data.roomId];
                 
@@ -493,7 +546,7 @@ wss.on("connection", ws => {
         if(ws.username) {
             onlineUsers.delete(ws.username);
         }
-        
+        matchmakingQueue = matchmakingQueue.filter(p => p.ws !== ws);
         broadcastOnlineCount();
         // console.log("Client disconnected");
     });
