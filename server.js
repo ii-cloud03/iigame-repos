@@ -6,20 +6,6 @@ const http = require("http");
 
 /////
 const bcrypt = require("bcryptjs"); ////
-const nodemailer = require("nodemailer");
-const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user:
-            process.env.MAIL_USER,
-        pass:
-            process.env.MAIL_PASS
-    }
-});
-function GenerateCode()
-{
-    return Math.floor(100000 + Math.random() * 900000).toString();
-}
 
 const app = express();
 
@@ -613,53 +599,6 @@ app.get("/", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-
-// test
-// 1)
-console.log("MAIL_USER =", process.env.MAIL_USER);
-console.log("MAIL_PASS = ", process.env.MAIL_PASS ? "FOUND" : "MISSING");
-console.log("Before mail test");
-// transporter.sendMail({
-//     from: process.env.MAIL_USER,
-//     to: process.env.MAIL_USER,
-//     subject: "SMTP Test",
-//     text: "Email system is working"
-// })
-// .then(() => console.log("MAIL OK"))
-// .catch(err => console.log("MAIL ERROR:", err));
-
-
-// 2)
-transporter.verify(function(err, success)
-{
-    if (err)
-        console.log("VERIFY ERROR:", err);
-    else
-        console.log("VERIFY OK");
-});
-
-(async () =>
-{
-    try
-    {
-        const info = await transporter.sendMail({
-            from: process.env.MAIL_USER,
-            to: process.env.MAIL_USER,
-            subject: "SMTP Test",
-            text: "Email system is working"
-        });
-
-        console.log("MAIL OK");
-        console.log(info.messageId);
-    }
-    catch (err)
-    {
-        console.log("MAIL ERROR:", err);
-    }
-})();
-console.log("After mail test");
-////
-
 
 server.listen(PORT, () => {
     console.log("Server started");
