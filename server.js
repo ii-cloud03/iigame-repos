@@ -615,17 +615,48 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 // test
+// 1)
 console.log("MAIL_USER =", process.env.MAIL_USER);
 console.log("MAIL_PASS = ", process.env.MAIL_PASS ? "FOUND" : "MISSING");
 console.log("Before mail test");
-transporter.sendMail({
-    from: process.env.MAIL_USER,
-    to: process.env.MAIL_USER,
-    subject: "SMTP Test",
-    text: "Email system is working"
-})
-.then(() => console.log("MAIL OK"))
-.catch(err => console.log("MAIL ERROR:", err));
+// transporter.sendMail({
+//     from: process.env.MAIL_USER,
+//     to: process.env.MAIL_USER,
+//     subject: "SMTP Test",
+//     text: "Email system is working"
+// })
+// .then(() => console.log("MAIL OK"))
+// .catch(err => console.log("MAIL ERROR:", err));
+
+
+// 2)
+transporter.verify(function(err, success)
+{
+    if (err)
+        console.log("VERIFY ERROR:", err);
+    else
+        console.log("VERIFY OK");
+});
+
+(async () =>
+{
+    try
+    {
+        const info = await transporter.sendMail({
+            from: process.env.MAIL_USER,
+            to: process.env.MAIL_USER,
+            subject: "SMTP Test",
+            text: "Email system is working"
+        });
+
+        console.log("MAIL OK");
+        console.log(info.messageId);
+    }
+    catch (err)
+    {
+        console.log("MAIL ERROR:", err);
+    }
+})();
 console.log("After mail test");
 ////
 
