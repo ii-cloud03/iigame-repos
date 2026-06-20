@@ -135,11 +135,15 @@ async function UpdateStats(room)
     {
         for (const p of room.players)
         {
-            await dbFirebase.ref("users/" + p.username.toLowerCase()
-            ).update({
+            await dbFirebase.ref("users/" + p.username.toLowerCase()).update({
                 draws: admin.database.ServerValue.increment(1),
                 coins: admin.database.ServerValue.increment(5)
             });
+
+            if (p.ws.readyState === WebSocket.OPEN)
+            {
+                await SendProfile(p.ws, p.username);
+            }
         }
 
         return;
@@ -150,25 +154,80 @@ async function UpdateStats(room)
 
     if (winner)
     {
-        await dbFirebase.ref("users/" + winner.username.toLowerCase()
-        ).update({
+        await dbFirebase.ref("users/" + winner.username.toLowerCase()).update({
             wins: admin.database.ServerValue.increment(1),
             coins: admin.database.ServerValue.increment(10),
             rating: admin.database.ServerValue.increment(25)
         });
+
+        if (winner.ws.readyState === WebSocket.OPEN)
+        {
+            await SendProfile(winner.ws, winner.username);
+        }
     }
 
     if (loser)
     {
-        await dbFirebase.ref("users/" + loser.username.toLowerCase()
-        ).update({
+        await dbFirebase.ref("users/" + loser.username.toLowerCase()).update({
             losses: admin.database.ServerValue.increment(1),
             coins: admin.database.ServerValue.increment(2),
             rating: admin.database.ServerValue.increment(-10)
         });
+
+        if (loser.ws.readyState === WebSocket.OPEN)
+        {
+            await SendProfile(loser.ws, loser.username);
+        }
     }
 }
 ////
+
+//////
+async function SendProfile(ws, username)
+{
+    const snap = await dbFirebase.ref("users/" + username.toLowerCase()).once("value");
+    
+    if (!snap.exists()) return;
+
+    const user = snap.val();
+
+    ws.send(JSON.stringify({
+        type: "profile_update",
+        rating: user.rating,
+        coins: user.coins,
+        wins: user.wins,
+        losses: user.losses,
+        draws: user.draws,
+        vip: user.vip
+    }));
+}
+//////
+
+///////
+async function SaveMatch(room)
+{
+    const playerX = room.players.find(p => p.symbol === "X");
+
+    const playerO = room.players.find(p => p.symbol === "O");
+
+    if (!playerX || !playerO) return;
+
+    let winner = room.winner;
+
+    if (winner === "X")
+        winner = playerX.username;
+
+    else if (winner === "O")
+        winner = playerO.username;
+
+    await dbFirebase.ref("matches").push({
+        playerX: playerX.username,
+        playerO: playerO.username,
+        winner: winner,
+        date: Date.now()
+    });
+}
+///////
 
 wss.on("connection", ws => {
     broadcastOnlineCount();
@@ -226,7 +285,16 @@ wss.on("connection", ws => {
 
                 onlineUsers.set(user.username, ws);
                 ws.username = user.username;
-                ws.send(JSON.stringify({type: "login_success", username: user.username, rating: user.rating, coins: user.coins}));
+                ws.send(JSON.stringify({
+                    type: "login_success",
+                    username: user.username,
+                    rating: user.rating,
+                    coins: user.coins,
+                    wins: user.wins,
+                    losses: user.losses,
+                    draws: user.draws,
+                    vip: user.vip
+                }));
 
                 return;
             }
@@ -290,9 +358,22 @@ wss.on("connection", ws => {
                 if (room.winner !== "")
                 {
                     await UpdateStats(room);
+                    await SaveMatch(room); ////// 
                 }
                 
                 broadcast(data.roomId);
+            }
+
+            else if (data.type === "leaderboard")
+            {
+                const snap = await dbFirebase.ref("users").once("value");
+                const users = snap.val();
+            
+                if (!users)return;
+                
+                const list = Object.values(users).sort((a, b) => b.rating - a.rating).slice(0, 10);
+            
+                ws.send(JSON.stringify({type: "leaderboard", players: list}));
             }
 
             else if (data.type === "typing") {
@@ -304,6 +385,26 @@ wss.on("connection", ws => {
                         p.ws.send(JSON.stringify({type: "typing"}));
                     }
                 });
+            }
+
+            else if (data.type === "history")
+            {
+                if (!ws.username) return;
+            
+                const snap = await dbFirebase.ref("matches").once("value");
+            
+                const matches = snap.val();
+                if (!matches) return;
+            
+                const result = [];
+            
+                Object.values(matches).reverse().forEach(m => {
+                    if (m.playerX === ws.username || m.playerO === ws.username) {
+                        result.push(m);
+                    }
+                });
+            
+                ws.send(JSON.stringify({type: "history", matches: result.slice(0, 20)}));
             }
 
             else if (data.type === "ping") {
