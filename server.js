@@ -280,7 +280,7 @@ wss.on("connection", ws => {
                     return;
                 }
 
-                // const user = snap.val();
+                const user = snap.val();
 
                 const ok = await bcrypt.compare(data.password, user.password);
                 
