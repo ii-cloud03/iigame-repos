@@ -339,7 +339,7 @@ wss.on("connection", ws => {
                     return;
                 }
 
-                if(!foundUser.email || foundUser.email.toLowerCase() === data.value.toLowerCase())
+                if(!foundUser.email || foundUser.email.toLowerCase() === data.email.toLowerCase())
                 {
                     ws.send(JSON.stringify({type: "email_mismatch"}));
                     return;
