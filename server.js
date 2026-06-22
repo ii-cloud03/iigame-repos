@@ -339,15 +339,18 @@ wss.on("connection", ws => {
                     return;
                 }
 
-                if(!foundUser.email || foundUser.email.toLowerCase() === data.email.toLowerCase())
+                console.log("CHECK EMAIL");
+                
+                if(!foundUser.email || foundUser.email.trim().toLowerCase() === data.email.trim().toLowerCase())
                 {
+                    console.log("EMAIL MISMATCH");
                     ws.send(JSON.stringify({type: "email_mismatch"}));
                     // debug
                     console.log("DB EMAIL:", foundUser.email);
                     console.log("USER EMAIL:", data.email);
                     return;
                 }
-            
+                console.log("EMAIL OK");
                 const code = GenerateCode();
             
                 await dbFirebase.ref("users/" + userKey).update({
