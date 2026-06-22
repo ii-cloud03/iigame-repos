@@ -325,7 +325,7 @@ wss.on("connection", ws => {
                 for (const key in users)
                 {
                     const u = users[key];
-                    if (u.username && u.username.toLowerCase() === data.value.toLowerCase())
+                    if (u.username && u.username.toLowerCase() === data.username.toLowerCase())
                     {
                         foundUser = u;
                         userKey = key;
