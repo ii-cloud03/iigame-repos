@@ -314,7 +314,7 @@ wss.on("connection", ws => {
                 return;
             }
 
-            else if (data.type === "forgot_password")
+            else if (data.type === "verify_reset_email")
             {
                 const snap = await dbFirebase.ref("users").once("value");
                 const users = snap.val();
@@ -324,9 +324,10 @@ wss.on("connection", ws => {
             
                 for (const key in users)
                 {
-                    if (users[key].email.toLowerCase() === data.email.toLowerCase())
+                    const u = users[key];
+                    if (u.username && u.username.toLowerCase() === data.value.toLowerCase())
                     {
-                        foundUser = users[key];
+                        foundUser = u;
                         userKey = key;
                         break;
                     }
@@ -337,6 +338,12 @@ wss.on("connection", ws => {
                     ws.send(JSON.stringify({type: "forgot_failed"}));
                     return;
                 }
+
+                if(!foundUser.email || foundUser.email.toLowerCase() === data.value.toLowerCase())
+                {
+                    ws.send(JSON.stringify({type: "email_mismatch"}));
+                    return;
+                }
             
                 const code = GenerateCode();
             
@@ -344,10 +351,10 @@ wss.on("connection", ws => {
                     resetCode: code, resetExpire: Date.now() + 10 * 60 * 1000
                 });
             
-                ws.send(JSON.stringify({type: "forgot_sent"}));
+                ws.send(JSON.stringify({type: "forgot_sent", code: code}));
             }
 
-            else if (data.type === "verify_reset_email")
+            else if (data.type === "forgot_start")
             {
                 const snap = await dbFirebase.ref("users").once("value");
                 const users = snap.val();
@@ -359,7 +366,8 @@ wss.on("connection", ws => {
                 }
             
                 let foundUser = null;
-            
+                let userKey = null;
+                
                 for (const key in users)
                 {
                     const u = users[key];
@@ -367,6 +375,7 @@ wss.on("connection", ws => {
                     if (u.username && u.username.toLowerCase() === data.value.toLowerCase())
                     {
                         foundUser = u;
+                        userKey = key;
                         break;
                     }
             
@@ -382,13 +391,25 @@ wss.on("connection", ws => {
                     ws.send(JSON.stringify({type: "forgot_failed"}));
                     return;
                 }
-            
+
+                // Email kiritilgan
                 if (foundUser.email.toLowerCase() === data.value.toLowerCase())
                 {
                     ws.send(JSON.stringify({type: "forgot_email_found"}));
+
+                    /**/
+                    const code = GenerateCode();
+                    await dbFirebase.ref("users/" + userKey).update({
+                        resetCode: code, resetExpire: Date.now() + 10 * 60 * 1000
+                    });
+            
+                    ws.send(JSON.stringify({type: "forgot_sent", code: code}));
+                    /**/
+                    
                     return;
                 }
-            
+
+                // USERNAME kiritilgan
                 const email = foundUser.email;
                 const parts = email.split("@");
             
