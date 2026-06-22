@@ -317,7 +317,6 @@ wss.on("connection", ws => {
             else if (data.type === "forgot_password")
             {
                 const snap = await dbFirebase.ref("users").once("value");
-            
                 const users = snap.val();
             
                 let foundUser = null;
@@ -345,14 +344,62 @@ wss.on("connection", ws => {
                     resetCode: code, resetExpire: Date.now() + 10 * 60 * 1000
                 });
             
-                await transporter.sendMail({
-                    from: process.env.MAIL_USER,
-                    to: foundUser.email,
-                    subject: "Password Reset",
-                    text: "Your code: " + code
-                });
-            
                 ws.send(JSON.stringify({type: "forgot_sent"}));
+            }
+
+            else if (data.type === "forgot_start")
+            {
+                const snap = await dbFirebase.ref("users").once("value");
+                const users = snap.val();
+            
+                if (!users)
+                {
+                    ws.send(JSON.stringify({type: "forgot_failed"}));
+                    return;
+                }
+            
+                let foundUser = null;
+            
+                for (const key in users)
+                {
+                    const u = users[key];
+            
+                    if (u.username && u.username.toLowerCase() === data.value.toLowerCase())
+                    {
+                        foundUser = u;
+                        break;
+                    }
+            
+                    if (u.email && u.email.toLowerCase() === data.value.toLowerCase())
+                    {
+                        foundUser = u;
+                        break;
+                    }
+                }
+            
+                if (!foundUser)
+                {
+                    ws.send(JSON.stringify({type: "forgot_failed"}));
+                    return;
+                }
+            
+                if (foundUser.email.toLowerCase() === data.value.toLowerCase())
+                {
+                    ws.send(JSON.stringify({type: "forgot_email_found"}));
+                    return;
+                }
+            
+                const email = foundUser.email;
+                const parts = email.split("@");
+            
+                const name = parts[0];
+                const domain = parts[1];
+            
+                const maskedEmail = name[0] + "*".repeat(Math.max(1, name.length - 2)) +
+                    name[name.length - 1] + "@" + domain[0] + "*".repeat(Math.max(1, domain.length - 5)) +
+                    domain.substring(domain.length - 4);
+            
+                ws.send(JSON.stringify({type: "forgot_username_found", username: foundUser.username, maskedEmail: maskedEmail}));
             }
             
             else if (data.type === "create") {
@@ -365,11 +412,7 @@ wss.on("connection", ws => {
                 ws.symbol = "X"; // ad
                 ws.roomId = roomId; // a
                 
-                ws.send(JSON.stringify({
-                    type: "created",
-                    roomId: roomId,
-                    symbol: "X"
-                }));
+                ws.send(JSON.stringify({type: "created", roomId: roomId, symbol: "X"}));
 
                 broadcast(roomId); // add
             }
@@ -382,8 +425,7 @@ wss.on("connection", ws => {
                     return;
                 }
                 if (room.players.length >= 2) {
-                    ws.send(JSON.stringify({
-                        type: "error", message: "Room full"}));
+                    ws.send(JSON.stringify({type: "error", message: "Room full"}));
                     return;
                 }
 
@@ -439,7 +481,6 @@ wss.on("connection", ws => {
                 else
                 {
                     matchmakingQueue.push({ws: ws, username: ws.username});
-            
                     ws.send(JSON.stringify({type: "matchmaking"}));
                 }
             }
