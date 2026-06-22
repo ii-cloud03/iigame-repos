@@ -395,8 +395,6 @@ wss.on("connection", ws => {
                 // Email kiritilgan
                 if (foundUser.email.toLowerCase() === data.value.toLowerCase())
                 {
-                    ws.send(JSON.stringify({type: "forgot_email_found"}));
-
                     /**/
                     const code = GenerateCode();
                     await dbFirebase.ref("users/" + userKey).update({
