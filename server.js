@@ -37,6 +37,14 @@ dbFirebase.ref("test").set({ message: "Hello Firebase"})
 .catch(err => console.log("Firebase Error:", err));
 //// firebase ///
 
+function GenerateCode()
+{
+    return Math.floor(
+        100000 +
+        Math.random() * 900000
+    ).toString();
+}
+
 const onlineUsers = new Map();
 
 function IsValidUsername(username)
