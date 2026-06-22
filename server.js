@@ -347,7 +347,7 @@ wss.on("connection", ws => {
                 ws.send(JSON.stringify({type: "forgot_sent"}));
             }
 
-            else if (data.type === "forgot_start")
+            else if (data.type === "verify_reset_email")
             {
                 const snap = await dbFirebase.ref("users").once("value");
                 const users = snap.val();
