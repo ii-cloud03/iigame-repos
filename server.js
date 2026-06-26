@@ -420,6 +420,45 @@ wss.on("connection", ws => {
             
                 ws.send(JSON.stringify({type: "forgot_username_found", username: foundUser.username, maskedEmail: maskedEmail}));
             }
+
+            else if (data.type === "verify_code")
+            {
+                const snap = await dbFirebase.ref("users").once("value");
+                const users = snap.val();
+            
+                let foundUser = null;
+            
+                for (const key in users)
+                {
+                    const u = users[key];
+            
+                    if (u.email && u.email.toLowerCase() === data.email.toLowerCase())
+                    {
+                        foundUser = u;
+                        break;
+                    }
+                }
+            
+                if (!foundUser)
+                {
+                    ws.send(JSON.stringify({type: "forgot_failed"}));
+                    return;
+                }
+            
+                if (Date.now() > foundUser.resetExpire)
+                {
+                    ws.send(JSON.stringify({type: "code_expired"}));
+                    return;
+                }
+            
+                if (foundUser.resetCode != data.code)
+                {
+                    ws.send(JSON.stringify({type: "invalid_code"}));
+                    return;
+                }
+            
+                ws.send(JSON.stringify({type: "code_verified"}));
+            }
             
             else if (data.type === "create") {
                 const roomId = Math.random().toString(36).substring(2, 8);
