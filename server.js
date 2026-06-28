@@ -415,7 +415,7 @@ wss.on("connection", ws => {
                 const domain = parts[1];
             
                 const maskedEmail = name[0] + "*".repeat(Math.max(1, name.length - 2)) +
-                    name[name.length - 1] + "@" + domain[0] + "*".repeat(Math.max(1, domain.length - 5)) +
+                    name[name.length - 1] + "@" + domain[0] + "*".repeat(Math.max(1, domain.length - 6)) +
                     domain.substring(domain.length - 4);
             
                 ws.send(JSON.stringify({type: "forgot_username_found", username: foundUser.username, maskedEmail: maskedEmail}));
