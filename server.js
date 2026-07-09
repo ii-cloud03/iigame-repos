@@ -382,6 +382,7 @@ wss.on("connection", ws => {
                     if (u.email && u.email.toLowerCase() === data.value.toLowerCase())
                     {
                         foundUser = u;
+                        userKey = key;
                         break;
                     }
                 }
@@ -445,7 +446,7 @@ wss.on("connection", ws => {
                     return;
                 }
             
-                if (Date.now() > foundUser.resetExpire)
+                if (!foundUser.resetExpire || Date.now() > foundUser.resetExpire)
                 {
                     ws.send(JSON.stringify({type: "code_expired"}));
                     return;
