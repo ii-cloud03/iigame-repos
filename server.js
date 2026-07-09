@@ -459,6 +459,44 @@ wss.on("connection", ws => {
             
                 ws.send(JSON.stringify({type: "code_verified"}));
             }
+
+            else if (data.type === "reset_password")
+            {
+                const snap = await dbFirebase.ref("users").once("value");
+                const users = snap.val();
+            
+                let foundUser = null;
+                let userKey = null;
+            
+                for (const key in users)
+                {
+                    const u = users[key];
+            
+                    if (u.email && u.email.toLowerCase() === data.email.toLowerCase())
+                    {
+                        foundUser = u;
+                        userKey = key;
+            
+                        break;
+                    }
+                }
+            
+                if (!foundUser)
+                {
+                    ws.send(JSON.stringify({type: "forgot_failed"}));
+                    return;
+                }
+            
+                const hashedPassword = await bcrypt.hash(data.password, 10);
+            
+                await dbFirebase.ref("users/" + userKey).update({
+                        password: hashedPassword,
+                        resetCode: "",
+                        resetExpire: 0
+                    });
+            
+                ws.send(JSON.stringify({type: "password_reset_success"}));
+            }
             
             else if (data.type === "create") {
                 const roomId = Math.random().toString(36).substring(2, 8);
