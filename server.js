@@ -264,16 +264,50 @@ wss.on("connection", ws => {
                 const hashedPassword = await bcrypt.hash(data.password, 10);
 
                 await dbFirebase.ref("users/" + username).set({
-                    username: data.username, 
+                    // Account
+                    username: data.username,
                     password: hashedPassword,
-                    email: data.email, // 
+                    email: data.email,
+                    
+                    // Profile
+                    displayName: data.username,
+                    avatar: "",
+                    country: "",
+                    bio: "",
+                
+                    // Statistics
                     rating: 1000,
+                    gamesPlayed: 0,
                     wins: 0,
                     losses: 0,
                     draws: 0,
                     coins: 0,
+                    experience: 0,
+                    level: 1,
                     vip: false,
-                    friends: []
+                
+                    // Social
+                    friends: [],
+                    friendRequests: [],
+                    blockedUsers: [],
+
+                    // Notifications
+                    notifications: [],
+                    
+                    // Presence
+                    status: "offline",
+                    lastSeen: Date.now(),
+                
+                    // Dates
+                    createdAt: Date.now(),
+                
+                    // Settings
+                    theme: "dark",
+                    language: "en",
+                
+                    // Security
+                    resetCode: "",
+                    resetExpire: 0
                 });
 
                 ws.send(JSON.stringify({type: "register_success"}));
@@ -300,6 +334,12 @@ wss.on("connection", ws => {
 
                 onlineUsers.set(user.username, ws);
                 ws.username = user.username;
+
+                // Firebase'da foydalanuvchini online deb belgilash
+                await dbFirebase.ref("users/" + username).update({
+                    status: "online"
+                });
+                
                 ws.send(JSON.stringify({
                     type: "login_success",
                     username: user.username,
@@ -771,8 +811,17 @@ wss.on("connection", ws => {
 
     ws.on("close", () => {
 
-        if(ws.username) {
+        if (ws.username)
+        {
             onlineUsers.delete(ws.username);
+            try
+            {
+                await dbFirebase
+                    .ref("users/" + ws.username.toLowerCase())
+                    .update({status: "offline", lastSeen: Date.now()});
+            } catch (err) {
+                console.error(err);
+            }
         }
         matchmakingQueue = matchmakingQueue.filter(p => p.ws !== ws);
         broadcastOnlineCount();
