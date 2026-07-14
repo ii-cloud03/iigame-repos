@@ -356,7 +356,6 @@ wss.on("connection", ws => {
 
             else if (data.type === "get_home_data")
             {
-                console.log(">>> GET HOME DATA");
                 if (!ws.username)
                 {
                     ws.send(JSON.stringify({type: "home_failed", message: "Not logged in"}));
@@ -379,8 +378,6 @@ wss.on("connection", ws => {
                 const draws = user.draws || 0;
             
                 const games = wins + losses + draws;
-
-                console.log(">>> SEND HOME DATA");
                 
                 ws.send(JSON.stringify({
                     type: "home_data",
@@ -391,10 +388,27 @@ wss.on("connection", ws => {
                     losses: losses,
                     draws: draws,
                     games: games,
+                    experience: user.experience || 0,
+                    level: user.level || 1,
                     vip: user.vip || false
                 }));
             
                 return;
+            }
+
+            else if(data.type === "get_friends")
+            {
+                // ...
+            }
+
+            else if(data.type === "get_notifications")
+            {
+                // ...
+            }
+
+            else if(data.type === "get_profile")
+            {
+                // ...
             }
 
             else if (data.type === "verify_reset_email")
