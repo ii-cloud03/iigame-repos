@@ -809,7 +809,7 @@ wss.on("connection", ws => {
         }
     });
 
-    ws.on("close", () => {
+    ws.on("close", async () => {
 
         if (ws.username)
         {
