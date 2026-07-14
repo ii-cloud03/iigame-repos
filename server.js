@@ -314,6 +314,46 @@ wss.on("connection", ws => {
                 return;
             }
 
+            else if (data.type === "get_home_data")
+            {
+                if (!ws.username)
+                {
+                    ws.send(JSON.stringify({type: "home_failed", message: "Not logged in"}));
+                    return;
+                }
+            
+                const username = ws.username.toLowerCase();
+                const snap = await dbFirebase.ref("users/" + username).once("value");
+            
+                if (!snap.exists())
+                {
+                    ws.send(JSON.stringify({type: "home_failed", message: "User not found"}));
+                    return;
+                }
+            
+                const user = snap.val();
+            
+                const wins = user.wins || 0;
+                const losses = user.losses || 0;
+                const draws = user.draws || 0;
+            
+                const games = wins + losses + draws;
+            
+                ws.send(JSON.stringify({
+                    type: "home_data",
+                    username: user.username,
+                    rating: user.rating || 1000,
+                    coins: user.coins || 0,
+                    wins: wins,
+                    losses: losses,
+                    draws: draws,
+                    games: games,
+                    vip: user.vip || false
+                }));
+            
+                return;
+            }
+
             else if (data.type === "verify_reset_email")
             {
                 const snap = await dbFirebase.ref("users").once("value");
