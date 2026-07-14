@@ -356,6 +356,7 @@ wss.on("connection", ws => {
 
             else if (data.type === "get_home_data")
             {
+                console.log(">>> GET HOME DATA");
                 if (!ws.username)
                 {
                     ws.send(JSON.stringify({type: "home_failed", message: "Not logged in"}));
@@ -378,7 +379,9 @@ wss.on("connection", ws => {
                 const draws = user.draws || 0;
             
                 const games = wins + losses + draws;
-            
+
+                console.log(">>> SEND HOME DATA");
+                
                 ws.send(JSON.stringify({
                     type: "home_data",
                     username: user.username,
