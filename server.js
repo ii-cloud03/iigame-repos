@@ -682,6 +682,7 @@ wss.on("connection", ws => {
             else if (data.type === "cancel_matchmaking")
             {
                 matchmakingQueue = matchmakingQueue.filter(p => p.ws !== ws);
+                ws.send(JSON.stringify({type: "match_cancelled"}));
             }
 
             else if (data.type === "move") {
