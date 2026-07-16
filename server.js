@@ -823,6 +823,20 @@ wss.on("connection", ws => {
                     }
                 });
             }
+
+            else if (data.type === "rematch_decline")
+            {
+                const room = rooms[data.roomId];
+                if (!room) return;
+            
+                room.rematchPlayers = [];
+            
+                room.players.forEach(p => {
+                    if (p.ws !== ws && p.ws.readyState === WebSocket.OPEN) {
+                        p.ws.send(JSON.stringify({type: "rematch_declined"}));
+                    }
+                });
+            }
                 
             else if (data.type === "chat") {
                 const room = rooms[data.roomId];
@@ -834,19 +848,6 @@ wss.on("connection", ws => {
                         p.ws.send(msg);
                     }
                 });
-            }
-                
-            else if (data.type === "restart") {
-                const room = rooms[data.roomId];
-
-                if (!room) return;
-                if (room.winner === "") return;
-                
-                room.board = createBoard();
-                room.turn = "X";
-                room.winner = "";
-
-                broadcast(data.roomId);
             }
         }
         catch (err) { // catch
