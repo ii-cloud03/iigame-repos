@@ -66,6 +66,7 @@ function createRoom() {
         board: createBoard(),
         turn: "X",
         winner: "",
+        winnerCells: [],
         players: []
     };
 }
@@ -117,6 +118,10 @@ function checkWinner(room) {
         [2,4,6]
     ];
 
+    // ad
+    room.winner = ""; //
+    room.winnerCells = []; // 
+    
     for (let w of wins) {
         const a = w[0];
         const b1 = w[1];
@@ -124,6 +129,8 @@ function checkWinner(room) {
 
         if (b[a] !== "" && b[a] === b[b1] && b[a] === b[c]) {
             room.winner = b[a];
+            room.winnerCells = w;
+            return;
         }
     }
 
@@ -132,11 +139,13 @@ function checkWinner(room) {
     for (let c of room.board) {
         if (c === "") {
             draw = false;
+            break;
         }
     }
 
     if (draw && room.winner === "") {
         room.winner = "DRAW";
+        room.winnerCells = [];
     }
 }
 
