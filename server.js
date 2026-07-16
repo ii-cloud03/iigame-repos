@@ -92,7 +92,8 @@ function broadcast(roomId) {
         type: "state",
         board: room.board,
         turn: room.turn,
-        winner: room.winner
+        winner: room.winner,
+        winnerCells: room.winnerCells
     });
 
     room.players.forEach(p => {
