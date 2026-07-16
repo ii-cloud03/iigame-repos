@@ -67,7 +67,9 @@ function createRoom() {
         turn: "X",
         winner: "",
         winnerCells: [],
-        players: []
+        players: [],
+        
+        rematchPlayers: []
     };
 }
 
@@ -797,6 +799,24 @@ wss.on("connection", ws => {
                 const room = rooms[data.roomId];
                 if (!room) return;
 
+                if (!room.rematchPlayers.includes(ws.username))  //// 
+                    room.rematchPlayers.push(ws.username);   ////
+
+                // Ikkalasi ham bosgan
+                if (room.rematchPlayers.length >= 2)
+                {
+                    room.board = createBoard();
+                    room.turn = "X";
+                    room.winner = "";
+                    room.winnerCells = [];
+                    room.rematchPlayers = [];
+            
+                    broadcast(data.roomId);
+            
+                    return;
+                }
+
+                // Faqat bittasi bosgan
                 room.players.forEach(p => {
                     if (p.ws !== ws && p.ws.readyState === WebSocket.OPEN) {
                         p.ws.send(JSON.stringify({type: "rematch_request"}));
