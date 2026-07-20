@@ -127,6 +127,7 @@ function StartRoomTimer(roomId)
             StopRoomTimer(room);
             // console.log("Time Up:", roomId);
             room.winner = room.turn === "X" ? "O" : "X";
+            room.winnerCells = [];
             await FinishGame(roomId);
             return;
         }
@@ -153,6 +154,7 @@ async function FinishGame(roomId)
         await UpdateStats(room);
         await SaveMatch(room);
         broadcastState(roomId);
+        broadcastTimer(roomId);
     }
     finally {
         room.finishing = false;
@@ -288,8 +290,7 @@ async function UpdateStats(room)
             rating: admin.database.ServerValue.increment(25)
         });
 
-        if (winner.ws.readyState === WebSocket.OPEN)
-        {
+        if (winner.ws.readyState === WebSocket.OPEN) {
             await SendProfile(winner.ws, winner.username);
         }
     }
@@ -302,8 +303,7 @@ async function UpdateStats(room)
             rating: admin.database.ServerValue.increment(-10)
         });
 
-        if (loser.ws.readyState === WebSocket.OPEN)
-        {
+        if (loser.ws.readyState === WebSocket.OPEN) {
             await SendProfile(loser.ws, loser.username);
         }
     }
@@ -994,6 +994,7 @@ wss.on("connection", ws => {
                 }));
             
                 broadcastState(data.roomId);
+                broadcastTimer(roomId);
             }
 
             else if (data.type === "rematch_request") {
