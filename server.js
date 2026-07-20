@@ -692,6 +692,25 @@ wss.on("connection", ws => {
                 broadcast(data.roomId);
             }
 
+            else if (data.type === "leave_match")
+            {
+                const room = rooms[data.roomId];
+                if (!room) return;
+            
+                const opponent = room.players.find(p => p.ws !== ws);
+            
+                if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
+                    opponent.ws.send(JSON.stringify({type: "opponent_left"})); // raqibga xabar yuborish
+                }
+            
+                ws.send(JSON.stringify({type: "leave_success"}));
+                room.players = room.players.filter(p => p.ws !== ws);
+            
+                if (room.players.length === 0) {
+                    delete rooms[data.roomId];
+                }
+            }
+
             else if (data.type === "find_match")
             {
                 if (!ws.username) return;
