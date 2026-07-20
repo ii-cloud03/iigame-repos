@@ -69,7 +69,7 @@ function createRoom() {
         winnerCells: [],
         players: [],
 
-        turnDuration: 15,
+        turnDuration: 30,
         turnStartedAt: 0,
         timerInterval: null,
         lastSecond: -1,
