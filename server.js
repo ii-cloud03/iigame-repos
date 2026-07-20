@@ -163,8 +163,7 @@ async function FinishGame(roomId)
 
 function broadcastOnlineCount()
 {
-    const online = onlineUsers.size;
-    const msg = JSON.stringify({type: "online", count: online});
+    const msg = JSON.stringify({type: "online", count: onlineUsers.size});
 
     wss.clients.forEach(ws => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -512,6 +511,8 @@ wss.on("connection", ws => {
                     theme: user.theme,
                     language: user.language
                 }));
+
+                broadcastOnlineCount();
 
                 return;
             }
@@ -1078,18 +1079,37 @@ wss.on("connection", ws => {
 
         if (ws.username)
         {
-            onlineUsers.delete(ws.username);
-            try
-            {
-                await dbFirebase
-                    .ref("users/" + ws.username.toLowerCase())
-                    .update({status: "offline", lastSeen: Date.now()});
-            } catch (err) {
-                console.error(err);
+            const current = onlineUsers.get(ws.username);
+
+            if (current === ws) {
+                onlineUsers.delete(ws.username);
+                try
+                {
+                    await dbFirebase
+                        .ref("users/" + ws.username.toLowerCase())
+                        .update({status: "offline", lastSeen: Date.now()});
+                } catch (err) {
+                    console.error(err);
+                }
+                
+                broadcastOnlineCount();
             }
         }
+
+        // Matchmaking navbatidan chiqarish
         matchmakingQueue = matchmakingQueue.filter(p => p.ws !== ws);
-        broadcastOnlineCount();
+
+        // Agar o'yinda bo'lsa
+        if (ws.roomId) {
+            const room = rooms[ws.roomId];
+    
+            if (room) {
+                const opponent = room.players.find(p => p.ws !== ws);
+                if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
+                    opponent.ws.send(JSON.stringify({type: "opponent_disconnected"}));
+                }
+            }
+        }
         // console.log("Client disconnected");
     });
 });
