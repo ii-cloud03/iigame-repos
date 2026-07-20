@@ -1020,15 +1020,14 @@ wss.on("connection", ws => {
                     room.finishing = false;
 
                     StartRoomTimer(data.roomId); // not reset
+                    broadcastState(data.roomId);
+                    broadcastTimer(data.roomId);
 
                     room.players.forEach(p => {
                         if (p.ws.readyState === WebSocket.OPEN) {
                             p.ws.send(JSON.stringify({type: "rematch_accepted"}));
                         }
                     });
-            
-                    broadcastState(data.roomId);
-                    broadcastTimer(data.roomId);
                     
                     return;
                 }
