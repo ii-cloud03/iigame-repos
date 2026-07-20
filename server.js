@@ -73,6 +73,7 @@ function createRoom() {
         turnStartedAt: 0,
         timerInterval: null,
         lastSecond: -1,
+        finishing: false,
         
         rematchPlayers: []
     };
@@ -111,11 +112,9 @@ function ResetRoomTimer(room)
 function StartRoomTimer(roomId)
 {
     const room = rooms[roomId];
-
     if (!room) return;
 
     StopRoomTimer(room);
-
     ResetRoomTimer(room);
 
     room.timerInterval = setInterval(async () =>
@@ -123,18 +122,18 @@ function StartRoomTimer(roomId)
         const seconds = GetRemainingSeconds(room);
 
         if (seconds <= 0) {
+            if (room.finishing) return;
+            
             StopRoomTimer(room);
             // console.log("Time Up:", roomId);
             room.winner = room.turn === "X" ? "O" : "X";
-        
             await FinishGame(roomId);
-            
             return;
         }
 
         if (seconds !== room.lastSecond) {
             room.lastSecond = seconds;
-            broadcast(roomId);
+            broadcastTimer(roomId);
         }
 
     }, 200);
@@ -144,13 +143,20 @@ async function FinishGame(roomId)
 {
     const room = rooms[roomId];
     if (!room) return;
+    if (room.finishing) return;
 
+    room.finishing = true;
+    
     StopRoomTimer(room);
 
-    await UpdateStats(room);
-    await SaveMatch(room);
-
-    broadcast(roomId);
+    try {
+        await UpdateStats(room);
+        await SaveMatch(room);
+        broadcastState(roomId);
+    }
+    finally {
+        room.finishing = false;
+    }
 }
 
 function broadcastOnlineCount()
@@ -165,19 +171,33 @@ function broadcastOnlineCount()
     });
 }
 
-function broadcast(roomId) {
+function broadcastState(roomId) { // broadcast
     const room = rooms[roomId];
-
     if (!room) return;
-
+    
     const data = JSON.stringify({
         type: "state",
         board: room.board,
         turn: room.turn,
         winner: room.winner,
         winnerCells: room.winnerCells,
-        
-        seconds: GetRemainingSeconds(room),
+    });
+
+    room.players.forEach(p => {
+        if (p.ws.readyState === WebSocket.OPEN) {
+            p.ws.send(data);
+        }
+    });
+}
+
+function broadcastTimer(roomId, seconds) {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.finishing) return;
+    
+    const data = JSON.stringify({
+        type: "timer",
+        seconds: GetRemainingSeconds(room)
     });
 
     room.players.forEach(p => {
@@ -188,8 +208,10 @@ function broadcast(roomId) {
 }
 
 function checkWinner(room) {
+    if (room.finishing) return;  //***///
+    
     const b = room.board;
-
+    
     const wins = [
         [0,1,2],
         [3,4,5],
@@ -749,7 +771,7 @@ wss.on("connection", ws => {
                 
                 ws.send(JSON.stringify({type: "created", roomId: roomId, symbol: "X"}));
 
-                broadcast(roomId); // add
+                broadcastState(roomId); // add
             }
 
             else if (data.type === "join") {
@@ -771,7 +793,7 @@ wss.on("connection", ws => {
                 
                 ws.send(JSON.stringify({type: "joined", symbol: "O"}));
 
-                broadcast(data.roomId);
+                broadcastState(data.roomId);
             }
 
             else if (data.type === "leave_match")
@@ -834,8 +856,8 @@ wss.on("connection", ws => {
                     }));
 
                     StartRoomTimer(roomId); // ch order
-                    broadcast(roomId);  // ch order
- 
+                    broadcastState(roomId);  // ch order
+                    broadcastTimer(roomId);
                     // StartTurnTimer(roomId);
                 }
                 else {
@@ -857,7 +879,8 @@ wss.on("connection", ws => {
                 if (room.turn !== data.symbol) return;
                 if (room.board[data.index] !== "") return;
                 if (room.winner !== "") return;
-
+                if (room.finishing) return;
+                
                 room.board[data.index] = data.symbol;
 
                 room.turn = data.symbol === "X" ? "O" : "X";
@@ -882,7 +905,7 @@ wss.on("connection", ws => {
                     ResetRoomTimer(room);
                 }
                 
-                broadcast(data.roomId);
+                broadcastState(data.roomId);
             }
 
             else if (data.type === "leaderboard")
@@ -970,7 +993,7 @@ wss.on("connection", ws => {
                     opponent: room.players.find(p => p.username !== player.username)?.username || ""
                 }));
             
-                broadcast(data.roomId);
+                broadcastState(data.roomId);
             }
 
             else if (data.type === "rematch_request") {
@@ -993,6 +1016,8 @@ wss.on("connection", ws => {
                     room.winnerCells = [];
                     room.rematchPlayers = [];
 
+                    room.finishing = false;
+
                     StartRoomTimer(roomId); // not reset
 
                     room.players.forEach(p => {
@@ -1001,8 +1026,9 @@ wss.on("connection", ws => {
                         }
                     });
             
-                    broadcast(data.roomId);
-            
+                    broadcastState(data.roomId);
+                    broadcastTimer(roomId);
+                    
                     return;
                 }
 
