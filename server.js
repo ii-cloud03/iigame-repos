@@ -337,6 +337,26 @@ wss.on("connection", ws => {
                 }
 
                 const user = snap.val();
+
+                const updates = {};
+
+                if (user.displayName === undefined) updates.displayName = user.username;
+                if (user.avatar === undefined) updates.avatar = "";
+                if (user.country === undefined) updates.country = "";
+                if (user.bio === undefined) updates.bio = "";
+                if (user.gamesPlayed === undefined) updates.gamesPlayed = 0;
+                if (user.coins === undefined) updates.coins = 0;
+                if (user.experience === undefined) updates.experience = 0;
+                if (user.level === undefined) updates.level = 1;
+                if (user.vip === undefined) updates.vip = false;
+                if (user.theme === undefined) updates.theme = "dark";
+                if (user.language === undefined) updates.language = "en";
+                
+                if (Object.keys(updates).length > 0) {
+                    await dbFirebase.ref("users/" + username).update(updates);
+                    Object.assign(user, updates);
+                }
+                
                 const ok = await bcrypt.compare(data.password, user.password);
                 
                 if(!ok) { // user.password !== data.password
