@@ -855,9 +855,9 @@ wss.on("connection", ws => {
                         opponent: opponent.username
                     }));
 
-                    StartRoomTimer(roomId); // ch order
-                    broadcastState(roomId);  // ch order
-                    broadcastTimer(roomId);
+                    StartRoomTimer(data.roomId); // ch order
+                    broadcastState(data.roomId);  // ch order
+                    broadcastTimer(data.roomId);
                     // StartTurnTimer(roomId);
                 }
                 else {
@@ -994,7 +994,7 @@ wss.on("connection", ws => {
                 }));
             
                 broadcastState(data.roomId);
-                broadcastTimer(roomId);
+                broadcastTimer(data.roomId);
             }
 
             else if (data.type === "rematch_request") {
@@ -1011,7 +1011,7 @@ wss.on("connection", ws => {
                     room.turn = "X";
                     room.winner = "";
 
-                    // StartTurnTimer(roomId);
+                    // StartTurnTimer(roomId); roomId - ?, data.roomId - !
                     // ResetRoomTimer(room);
                     
                     room.winnerCells = [];
@@ -1019,7 +1019,7 @@ wss.on("connection", ws => {
 
                     room.finishing = false;
 
-                    StartRoomTimer(roomId); // not reset
+                    StartRoomTimer(data.roomId); // not reset
 
                     room.players.forEach(p => {
                         if (p.ws.readyState === WebSocket.OPEN) {
@@ -1028,7 +1028,7 @@ wss.on("connection", ws => {
                     });
             
                     broadcastState(data.roomId);
-                    broadcastTimer(roomId);
+                    broadcastTimer(data.roomId);
                     
                     return;
                 }
