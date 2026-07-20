@@ -68,21 +68,76 @@ function createRoom() {
         winner: "",
         winnerCells: [],
         players: [],
-        turnSeconds: 15,
-        turnTimer: null,
-        winReason: "normal",
+
+        turnDuration: 15,
+        turnStartedAt: 0,
+        timerInterval: null,
+        lastSecond: -1,
+        
         rematchPlayers: []
     };
 }
 
-function StopTurnTimer(room)
+function GetRemainingSeconds(room)
+{
+    if (!room.turnStartedAt)
+        return room.turnDuration;
+    
+    const elapsed = (Date.now() - room.turnStartedAt) / 1000;
+    const remaining = Math.ceil(room.turnDuration - elapsed);
+
+    return Math.max(0, remaining);
+}
+
+function StopRoomTimer(room)
 {
     if (!room) return;
-    
-    if (room.turnTimer) {
-        clearTimeout(room.turnTimer);
-        room.turnTimer = null;
+
+    if (room.timerInterval)
+    {
+        clearInterval(room.timerInterval);
+        room.timerInterval = null;
     }
+
+    room.lastSecond = -1;
+}
+
+function ResetRoomTimer(room)
+{
+    room.turnStartedAt = Date.now();
+    room.lastSecond = -1;
+}
+
+function StartRoomTimer(roomId)
+{
+    const room = rooms[roomId];
+
+    if (!room) return;
+
+    StopRoomTimer(room);
+
+    ResetRoomTimer(room);
+
+    room.timerInterval = setInterval(async () =>
+    {
+        const seconds = GetRemainingSeconds(room);
+
+        if (seconds <= 0) {
+            StopRoomTimer(room);
+            // console.log("Time Up:", roomId);
+            room.winner = room.turn === "X" ? "O" : "X";
+        
+            await FinishGame(roomId);
+            
+            return;
+        }
+
+        if (seconds !== room.lastSecond) {
+            room.lastSecond = seconds;
+            broadcast(roomId);
+        }
+
+    }, 200);
 }
 
 async function FinishGame(roomId)
@@ -90,30 +145,12 @@ async function FinishGame(roomId)
     const room = rooms[roomId];
     if (!room) return;
 
-    StopTurnTimer(room);
+    StopRoomTimer(room);
 
     await UpdateStats(room);
     await SaveMatch(room);
 
     broadcast(roomId);
-}
-
-function StartTurnTimer(roomId)
-{
-    const room = rooms[roomId];
-
-    if (!room) return;
-
-    StopTurnTimer(room);
-
-    room.turnTimer = setTimeout(async () =>
-    {
-        room.winner = room.turn === "X" ? "O" : "X";
-        room.winReason = "timeout";
-
-        await FinishGame(roomId);
-
-    }, room.turnSeconds * 1000);
 }
 
 function broadcastOnlineCount()
@@ -140,8 +177,7 @@ function broadcast(roomId) {
         winner: room.winner,
         winnerCells: room.winnerCells,
         
-        seconds: room.turnSeconds,
-        winReason: room.winReason
+        seconds: GetRemainingSeconds(room),
     });
 
     room.players.forEach(p => {
@@ -743,7 +779,8 @@ wss.on("connection", ws => {
                 const room = rooms[data.roomId];
                 if (!room) return;
 
-                StopTurnTimer(room);
+                // StopTurnTimer(room);
+                StopRoomTimer(room);
                 
                 const opponent = room.players.find(p => p.ws !== ws);
             
@@ -795,13 +832,13 @@ wss.on("connection", ws => {
                         symbol: "O",
                         opponent: opponent.username
                     }));
-            
-                    broadcast(roomId);
 
-                    StartTurnTimer(roomId);
+                    StartRoomTimer(roomId); // ch order
+                    broadcast(roomId);  // ch order
+ 
+                    // StartTurnTimer(roomId);
                 }
-                else
-                {
+                else {
                     matchmakingQueue.push({ws: ws, username: ws.username});
                     ws.send(JSON.stringify({type: "matchmaking"}));
                 }
@@ -834,10 +871,15 @@ wss.on("connection", ws => {
                     // await SaveMatch(room); ////// 
                     // 3 -> 1
                     await FinishGame(data.roomId);
+                    
+                    // StopRoomTimer(room);
+                    // await UpdateStats(room);
+                    // await SaveMatch(room);
                 }
                 else   /////a
                 {
-                    StartTurnTimer(data.roomId);
+                    // StartTurnTimer(data.roomId);
+                    ResetRoomTimer(room);
                 }
                 
                 broadcast(data.roomId);
@@ -945,10 +987,13 @@ wss.on("connection", ws => {
                     room.turn = "X";
                     room.winner = "";
 
-                    StartTurnTimer(roomId);
+                    // StartTurnTimer(roomId);
+                    // ResetRoomTimer(room);
                     
                     room.winnerCells = [];
                     room.rematchPlayers = [];
+
+                    StartRoomTimer(roomId); // not reset
 
                     room.players.forEach(p => {
                         if (p.ws.readyState === WebSocket.OPEN) {
