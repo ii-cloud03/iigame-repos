@@ -192,10 +192,9 @@ function broadcastState(roomId) { // broadcast
     });
 }
 
-function broadcastTimer(roomId, seconds) {
+function broadcastTimer(roomId) {
     const room = rooms[roomId];
     if (!room) return;
-    if (room.finishing) return;
     
     const data = JSON.stringify({
         type: "timer",
@@ -855,9 +854,9 @@ wss.on("connection", ws => {
                         opponent: opponent.username
                     }));
 
-                    StartRoomTimer(data.roomId); // ch order
-                    broadcastState(data.roomId);  // ch order
-                    broadcastTimer(data.roomId);
+                    StartRoomTimer(roomId); // ch order
+                    broadcastState(roomId);  // ch order
+                    broadcastTimer(roomId);
                     // StartTurnTimer(roomId);
                 }
                 else {
@@ -906,6 +905,7 @@ wss.on("connection", ws => {
                 }
                 
                 broadcastState(data.roomId);
+                broadcastTimer(data.roomId);
             }
 
             else if (data.type === "leaderboard")
