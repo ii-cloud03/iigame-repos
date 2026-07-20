@@ -354,13 +354,40 @@ wss.on("connection", ws => {
                 
                 ws.send(JSON.stringify({
                     type: "login_success",
+
+                    // ===== ACCOUNT =====
                     username: user.username,
+                    email: user.email,
+            
+                    // ===== PROFILE =====
+                    displayName: user.displayName,
+                    avatar: user.avatar,
+                    country: user.country,
+                    bio: user.bio,
+            
+                    // ===== STATISTICS =====
                     rating: user.rating,
-                    coins: user.coins,
+                    gamesPlayed: user.gamesPlayed,
                     wins: user.wins,
                     losses: user.losses,
                     draws: user.draws,
-                    vip: user.vip
+            
+                    coins: user.coins,
+                    experience: user.experience,
+                    level: user.level,
+            
+                    vip: user.vip,
+            
+                    // ===== PRESENCE =====
+                    status: "online",
+                    lastSeen: user.lastSeen,
+            
+                    // ===== DATES =====
+                    createdAt: user.createdAt,
+            
+                    // ===== SETTINGS =====
+                    theme: user.theme,
+                    language: user.language
                 }));
 
                 return;
