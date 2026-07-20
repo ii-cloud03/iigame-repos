@@ -70,44 +70,50 @@ function createRoom() {
         players: [],
         turnSeconds: 15,
         turnTimer: null,
-        
+        winReason: "normal",
         rematchPlayers: []
     };
 }
 
 function StopTurnTimer(room)
 {
+    if (!room) return;
+    
     if (room.turnTimer) {
         clearTimeout(room.turnTimer);
         room.turnTimer = null;
     }
 }
 
-function StartTurnTimer(roomId)
+async function FinishGame(roomId)
 {
     const room = rooms[roomId];
     if (!room) return;
 
     StopTurnTimer(room);
 
-    room.turnSeconds = 15;
-    room.turnTimer = setTimeout(() =>
+    await UpdateStats(room);
+    await SaveMatch(room);
+
+    broadcast(roomId);
+}
+
+function StartTurnTimer(roomId)
+{
+    const room = rooms[roomId];
+
+    if (!room) return;
+
+    StopTurnTimer(room);
+
+    room.turnTimer = setTimeout(async () =>
     {
-        const winner = room.turn === "X" ? room.playerO : room.playerX;
-        const loser = room.turn === "X" ? room.playerX : room.playerO;
-        
-        const message = JSON.stringify({
-            type: "time_up",
-            winner: winner.username,
-            loser: loser.username
-        });
+        room.winner = room.turn === "X" ? "O" : "X";
+        room.winReason = "timeout";
 
-        room.playerX.ws.send(message);
-        room.playerO.ws.send(message);
+        await FinishGame(roomId);
 
-        delete rooms[roomId];
-
-    }, 15000);
+    }, room.turnSeconds * 1000);
 }
 
 function broadcastOnlineCount()
@@ -820,9 +826,11 @@ wss.on("connection", ws => {
 
                 if (room.winner !== "")
                 {
-                    StopTurnTimer(room);   ///////a
-                    await UpdateStats(room);
-                    await SaveMatch(room); ////// 
+                    // StopTurnTimer(room);   ///////a
+                    // await UpdateStats(room);
+                    // await SaveMatch(room); ////// 
+                    // 3 -> 1
+                    await FinishGame(data.roomId);
                 }
                 else   /////a
                 {
