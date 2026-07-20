@@ -68,9 +68,46 @@ function createRoom() {
         winner: "",
         winnerCells: [],
         players: [],
+        turnSeconds: 15,
+        turnTimer: null,
         
         rematchPlayers: []
     };
+}
+
+function StopTurnTimer(room)
+{
+    if (room.turnTimer) {
+        clearTimeout(room.turnTimer);
+        room.turnTimer = null;
+    }
+}
+
+function StartTurnTimer(roomId)
+{
+    const room = rooms[roomId];
+    if (!room) return;
+
+    StopTurnTimer(room);
+
+    room.turnSeconds = 15;
+    room.turnTimer = setTimeout(() =>
+    {
+        const winner = room.turn === "X" ? room.playerO : room.playerX;
+        const loser = room.turn === "X" ? room.playerX : room.playerO;
+        
+        const message = JSON.stringify({
+            type: "time_up",
+            winner: winner.username,
+            loser: loser.username
+        });
+
+        room.playerX.ws.send(message);
+        room.playerO.ws.send(message);
+
+        delete rooms[roomId];
+
+    }, 15000);
 }
 
 function broadcastOnlineCount()
@@ -696,7 +733,9 @@ wss.on("connection", ws => {
             {
                 const room = rooms[data.roomId];
                 if (!room) return;
-            
+
+                StopTurnTimer(room);
+                
                 const opponent = room.players.find(p => p.ws !== ws);
             
                 if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
@@ -749,6 +788,8 @@ wss.on("connection", ws => {
                     }));
             
                     broadcast(roomId);
+
+                    StartTurnTimer(roomId);
                 }
                 else
                 {
@@ -779,8 +820,13 @@ wss.on("connection", ws => {
 
                 if (room.winner !== "")
                 {
+                    StopTurnTimer(room);   ///////a
                     await UpdateStats(room);
                     await SaveMatch(room); ////// 
+                }
+                else   /////a
+                {
+                    StartTurnTimer(data.roomId);
                 }
                 
                 broadcast(data.roomId);
@@ -887,6 +933,9 @@ wss.on("connection", ws => {
                     room.board = createBoard();
                     room.turn = "X";
                     room.winner = "";
+
+                    StartTurnTimer(roomId);
+                    
                     room.winnerCells = [];
                     room.rematchPlayers = [];
 
