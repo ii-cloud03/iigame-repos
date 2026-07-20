@@ -870,6 +870,12 @@ wss.on("connection", ws => {
                     room.winner = "";
                     room.winnerCells = [];
                     room.rematchPlayers = [];
+
+                    room.players.forEach(p => {
+                        if (p.ws.readyState === WebSocket.OPEN) {
+                            p.ws.send(JSON.stringify({type: "rematch_accepted"}));
+                        }
+                    });
             
                     broadcast(data.roomId);
             
