@@ -781,6 +781,14 @@ wss.on("connection", ws => {
                     ws.send(JSON.stringify({type: "error", message: "Player not found"}));
                     return;
                 }
+
+                // Eski socketni yopamiz
+                if (player.ws && player.ws !== ws) {
+                    try {
+                        player.ws.close();
+                    }
+                    catch (e) {}
+                }
             
                 player.ws = ws;
             
@@ -790,7 +798,12 @@ wss.on("connection", ws => {
 
                 onlineUsers.set(data.username, ws);
                 
-                ws.send(JSON.stringify({type: "reconnected", symbol: player.symbol}));
+                ws.send(JSON.stringify({
+                    type: "reconnected",
+                    roomId: data.roomId,
+                    symbol: player.symbol, 
+                    opponent: room.players.find(p => p.username !== player.username)?.username || ""
+                }));
             
                 broadcast(data.roomId);
             }
