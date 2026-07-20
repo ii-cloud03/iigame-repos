@@ -138,7 +138,10 @@ function broadcast(roomId) {
         board: room.board,
         turn: room.turn,
         winner: room.winner,
-        winnerCells: room.winnerCells
+        winnerCells: room.winnerCells,
+        
+        seconds: room.turnSeconds,
+        winReason: room.winReason
     });
 
     room.players.forEach(p => {
