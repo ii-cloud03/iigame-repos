@@ -916,7 +916,16 @@ wss.on("connection", ws => {
             
                 if (!users)return;
                 
-                const list = Object.values(users).sort((a, b) => b.rating - a.rating).slice(0, 10);
+                // const list = Object.values(users).sort((a, b) => b.rating - a.rating).slice(0, 10);
+                const list = Object.values(users)
+                    .sort((a, b) => b.rating - a.rating)
+                    .map(user => ({
+                        username: user.username,
+                        rating: user.rating || 0,
+                        wins: user.wins || 0,
+                        losses: user.losses || 0,
+                        draws: user.draws || 0
+                    }));
             
                 ws.send(JSON.stringify({type: "leaderboard", players: list}));
             }
