@@ -928,7 +928,7 @@ wss.on("connection", ws => {
                 //     }));
 
                 const list = Object.values(users)
-                    .sort((a, b) => b.rating - a.rating)
+                    .sort((a, b) => b.rating - a.rating).slice(0, 100)
                     .map(user => {
                         const wins = user.wins || 0;
                         const losses = user.losses || 0;
