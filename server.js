@@ -609,7 +609,7 @@ wss.on("connection", ws => {
                         joined: profile.created || "",
                         lastOnline: profile.lastOnline || "",
                         avatar: profile.avatar || "",
-                        // status: profile.status || "offline"
+                        status: profile.status || "offline"
                     }));
                 }
                 catch (err)
