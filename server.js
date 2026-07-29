@@ -606,8 +606,8 @@ wss.on("connection", ws => {
                             ? ((wins / games) * 100).toFixed(1)
                             : "0.0",
                         // bio: profile.bio || "",
-                        joined: profile.created || "",
-                        lastOnline: profile.lastOnline || "",
+                        joined: profile.createdAt || "",
+                        lastOnline: profile.lastSeen || "",
                         avatar: profile.avatar || "",
                         status: profile.status || "offline"
                     }));
