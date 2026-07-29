@@ -574,6 +574,51 @@ wss.on("connection", ws => {
                 // ...
             }
 
+            else if (data.type === "profile")
+            {
+                try
+                {
+                    const snap = await dbFirebase
+                        .ref("users/" + data.username.toLowerCase())
+                        .once("value");
+            
+                    if (!snap.exists()) {
+                        ws.send(JSON.stringify({type: "profile_not_found"}));
+                        return;
+                    }
+            
+                    const profile = snap.val();
+            
+                    const wins = profile.wins || 0;
+                    const losses = profile.losses || 0;
+                    const draws = profile.draws || 0;
+                    const games = wins + losses + draws;
+            
+                    ws.send(JSON.stringify({
+                        type: "profile",
+                        username: profile.username,
+                        rating: profile.rating || 0,
+                        wins,
+                        losses,
+                        draws,
+                        games,
+                        winRate: games
+                            ? ((wins / games) * 100).toFixed(1)
+                            : "0.0",
+                        // bio: profile.bio || "",
+                        joined: profile.created || "",
+                        lastOnline: profile.lastOnline || "",
+                        avatar: profile.avatar || "",
+                        // status: profile.status || "offline"
+                    }));
+                }
+                catch (err)
+                {
+                    console.error(err);
+                    ws.send(JSON.stringify({type: "profile_failed"}));
+                }
+            }
+
             else if (data.type === "verify_reset_email")
             {
                 const snap = await dbFirebase.ref("users").once("value");
