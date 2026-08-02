@@ -384,8 +384,10 @@ wss.on("connection", ws => {
                     email: data.email,
                     
                     // Profile
-                    displayName: data.username,
-                    avatar: "",
+                    // displayName: data.username,
+                    firstName: "",
+                    lastName: "",
+                    avatar: "default",
                     country: "",
                     bio: "",
                 
@@ -442,8 +444,9 @@ wss.on("connection", ws => {
 
                 const updates = {};
 
-                if (user.displayName === undefined) updates.displayName = user.username;
-                if (user.avatar === undefined) updates.avatar = "";
+                if (user.firstName === undefined) updates.firstName = "";
+                if (user.lastName === undefined) updates.lastName = "";
+                if (user.avatar === undefined) updates.avatar = "default";
                 if (user.country === undefined) updates.country = "";
                 if (user.bio === undefined) updates.bio = "";
                 if (user.gamesPlayed === undefined) updates.gamesPlayed = 0;
@@ -482,7 +485,9 @@ wss.on("connection", ws => {
                     email: user.email,
             
                     // ===== PROFILE =====
-                    displayName: user.displayName,
+                    // displayName: user.displayName,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
                     avatar: user.avatar,
                     country: user.country,
                     bio: user.bio,
