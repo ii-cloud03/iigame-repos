@@ -420,6 +420,7 @@ wss.on("connection", ws => {
                     // Settings
                     theme: "dark",
                     language: "en",
+                    sounds: true,
                 
                     // Security
                     resetCode: "",
@@ -456,6 +457,7 @@ wss.on("connection", ws => {
                 if (user.vip === undefined) updates.vip = false;
                 if (user.theme === undefined) updates.theme = "dark";
                 if (user.language === undefined) updates.language = "en";
+                if (user.sounds === undefined) updates.language = true;
                 
                 if (Object.keys(updates).length > 0) {
                     await dbFirebase.ref("users/" + username).update(updates);
@@ -514,7 +516,8 @@ wss.on("connection", ws => {
             
                     // ===== SETTINGS =====
                     theme: user.theme,
-                    language: user.language
+                    language: user.language,
+                    sounds: user.sounds
                 }));
 
                 broadcastOnlineCount();
