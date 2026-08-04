@@ -389,6 +389,7 @@ wss.on("connection", ws => {
                     lastName: "",
                     avatar: "default",
                     country: "",
+                    location: "",
                     bio: "",
                 
                     // Statistics
@@ -449,6 +450,7 @@ wss.on("connection", ws => {
                 if (user.lastName === undefined) updates.lastName = "";
                 if (user.avatar === undefined) updates.avatar = "default";
                 if (user.country === undefined) updates.country = "";
+                if (user.location === undefined) updates.location = "";
                 if (user.bio === undefined) updates.bio = "";
                 if (user.gamesPlayed === undefined) updates.gamesPlayed = 0;
                 if (user.coins === undefined) updates.coins = 0;
@@ -492,6 +494,7 @@ wss.on("connection", ws => {
                     lastName: user.lastName,
                     avatar: user.avatar,
                     country: user.country,
+                    location: user.location,
                     bio: user.bio,
             
                     // ===== STATISTICS =====
@@ -605,6 +608,8 @@ wss.on("connection", ws => {
                     ws.send(JSON.stringify({
                         type: "profile",
                         username: profile.username,
+                        country: profile.country,
+                        location: profile.location,
                         rating: profile.rating || 0,
                         wins,
                         losses,
