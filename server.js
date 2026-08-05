@@ -458,7 +458,7 @@ wss.on("connection", ws => {
                 if (user.level === undefined) updates.level = 1;
                 if (user.vip === undefined) updates.vip = false;
                 if (user.theme === undefined) updates.theme = "dark";
-                if (user.language === undefined) updates.language = "english";
+                if (user.language === undefined) updates.language = "English";
                 if (user.sounds === undefined) updates.sounds = true;
                 
                 if (Object.keys(updates).length > 0) {
@@ -629,6 +629,32 @@ wss.on("connection", ws => {
                 {
                     console.error(err);
                     ws.send(JSON.stringify({type: "profile_failed"}));
+                }
+            }
+
+            else if (data.type === "update_profile")
+            {
+                const username = data.username.toLowerCase();
+            
+                try
+                {
+                    await dbFirebase.ref("users/" + username).update({
+                        firstName: data.firstName || "",
+                        lastName: data.lastName || "",
+                        country: data.country || "",
+                        location: data.location || "",
+                        avatar: data.avatar || "default",
+                        language: data.language || "English",
+                        theme: data.theme || "Dark",
+                        sounds: data.sounds === true
+                    });
+            
+                    ws.send(JSON.stringify({type: "profile_updated"}));
+                }
+                catch (err)
+                {
+                    console.error(err);
+                    ws.send(JSON.stringify({type: "profile_update_failed"}));
                 }
             }
 
