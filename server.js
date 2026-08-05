@@ -420,7 +420,7 @@ wss.on("connection", ws => {
                 
                     // Settings
                     theme: "dark",
-                    language: "en",
+                    language: "english",
                     sounds: true,
                 
                     // Security
@@ -458,7 +458,7 @@ wss.on("connection", ws => {
                 if (user.level === undefined) updates.level = 1;
                 if (user.vip === undefined) updates.vip = false;
                 if (user.theme === undefined) updates.theme = "dark";
-                if (user.language === undefined) updates.language = "en";
+                if (user.language === undefined) updates.language = "english";
                 if (user.sounds === undefined) updates.language = true;
                 
                 if (Object.keys(updates).length > 0) {
