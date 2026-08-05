@@ -459,7 +459,7 @@ wss.on("connection", ws => {
                 if (user.vip === undefined) updates.vip = false;
                 if (user.theme === undefined) updates.theme = "dark";
                 if (user.language === undefined) updates.language = "english";
-                if (user.sounds === undefined) updates.language = true;
+                if (user.sounds === undefined) updates.sounds = true;
                 
                 if (Object.keys(updates).length > 0) {
                     await dbFirebase.ref("users/" + username).update(updates);
