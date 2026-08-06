@@ -559,8 +559,6 @@ wss.on("connection", ws => {
                     rating: user.rating || 1000,
                     coins: user.coins || 0,
                     wins: wins,
-                    losses: losses,
-                    draws: draws,
                     games: games,
                     winRate: games
                             ? ((wins / games) * 100).toFixed(1)
