@@ -496,6 +496,27 @@ wss.on("connection", ws => {
                     await dbFirebase.ref("users/" + username).update(updates);
                     Object.assign(user, updates);
                 }
+
+                // Daily reset
+                if (user.dailyDate !== getToday())
+                {
+                    user.dailyDate = getToday();
+                    user.dailyProgress = 0;
+                    user.dailyClaimed = false;
+                    user.dailyChallengeType = "win_games";
+                    user.dailyTarget = 3;
+                    user.dailyReward = 250;
+                    await dbFirebase
+                        .ref("users/" + username)
+                        .update({
+                            dailyDate: user.dailyDate,
+                            dailyProgress: 0,
+                            dailyClaimed: false,
+                            dailyChallengeType: "win_games",
+                            dailyTarget: 3,
+                            dailyReward: 15
+                        });
+                }
                 
                 const ok = await bcrypt.compare(data.password, user.password);
                 
