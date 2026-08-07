@@ -416,7 +416,7 @@ wss.on("connection", ws => {
                     dailyClaimed: false,
                     dailyDate: getToday(),
                     
-                    last5: []
+                    last5: [],
                 
                     // Social
                     friends: [],
@@ -545,7 +545,7 @@ wss.on("connection", ws => {
                     dailyReward: user.dailyReward,
                     dailyClaimed: user.dailyClaimed,
                     
-                    last5: user.last5
+                    last5: user.last5,
             
                     vip: user.vip,
             
