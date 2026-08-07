@@ -20,6 +20,58 @@ function getToday()
     return new Date().toISOString().split("T")[0];
 }
 
+function GenerateDailyChallenge()
+{
+    const challenges =
+    [
+        {
+            type: "win_games",
+            target: 3,
+            reward: 15
+        },
+
+        {
+            type: "win_games",
+            target: 5,
+            reward: 25
+        },
+
+        {
+            type: "play_games",
+            target: 5,
+            reward: 20
+        },
+
+        {
+            type: "play_games",
+            target: 10,
+            reward: 40
+        },
+
+        {
+            type: "play_friend",
+            target: 5,
+            reward: 25
+        },
+
+        {
+            type: "win_friend",
+            target: 3,
+            reward: 30
+        },
+
+        {
+            type: "draw_games",
+            target: 2,
+            reward: 10
+        }
+    ];
+
+    return challenges[
+        Math.floor(Math.random() * challenges.length)
+    ];
+}
+
 let rooms = {};
 let matchmakingQueue = [];
 
@@ -382,6 +434,8 @@ wss.on("connection", ws => {
 
                 const hashedPassword = await bcrypt.hash(data.password, 10);
 
+                const challenge = GenerateDailyChallenge();
+                
                 await dbFirebase.ref("users/" + username).set({
                     // Account
                     username: data.username,
@@ -409,12 +463,15 @@ wss.on("connection", ws => {
                     vip: false,
 
                     // 
-                    dailyChallengeType: "win_games",
-                    dailyTarget: 3,
-                    dailyProgress: 0,
-                    dailyReward: 15,
-                    dailyClaimed: false,
-                    dailyDate: getToday(),
+                    dailyChallengeType: challenge.type,
+                    dailyChallengeTarget: challenge.target,
+                    dailyChallengeProgress: 0,
+                    dailyChallengeReward: challenge.reward,
+                    dailyChallengeClaimed: false,
+                    dailyChallengeDate: getToday(),
+                    dailyRewardClaimed: false,
+                    dailyRewardDate: getToday(),
+                    dailyRewardCoins: 12,
                     
                     last5: [],
                 
@@ -483,12 +540,26 @@ wss.on("connection", ws => {
                 
                 if (user.rating === undefined) updates.rating = 1000;
                 
-                if (user.dailyChallengeType === undefined) updates.dailyChallengeType = "win_games";
-                if (user.dailyTarget === undefined) updates.dailyTarget = 3;
-                if (user.dailyProgress === undefined) updates.dailyProgress = 0;
-                if (user.dailyReward === undefined) updates.dailyReward = 15;
-                if (user.dailyClaimed === undefined) updates.dailyClaimed = false;
-                if (user.dailyDate === undefined) updates.dailyDate = getToday();
+                if (user.dailyChallengeType === undefined) {
+                    const challenge = GenerateDailyChallenge();
+                    
+                    updates.dailyChallengeType = challenge.type;
+                    updates.dailyChallengeTarget = challenge.target;
+                    updates.dailyChallengeProgress = 0;
+                    updates.dailyChallengeReward = challenge.reward;
+                    updates.dailyChallengeClaimed = false;
+                    updates.dailyChallengeDate = getToday();
+                }
+                
+                // if (user.dailyTarget === undefined) updates.dailyTarget = 3;
+                // if (user.dailyProgress === undefined) updates.dailyProgress = 0;
+                // if (user.dailyReward === undefined) updates.dailyReward = 15;
+                // if (user.dailyClaimed === undefined) updates.dailyClaimed = false;
+                // if (user.dailyDate === undefined) updates.dailyDate = getToday();
+
+                if (user.dailyRewardDate === undefined) updates.dailyRewardDate = getToday();
+                if (user.dailyRewardClaimed === undefined) updates.dailyRewardClaimed = false;
+                if (user.dailyRewardCoins === undefined) updates.dailyRewardCoins = 12;
                 
                 if (user.last5 === undefined) updates.last5 = [];
                 
@@ -500,22 +571,28 @@ wss.on("connection", ws => {
                 // Daily reset
                 if (user.dailyDate !== getToday())
                 {
-                    user.dailyDate = getToday();
-                    user.dailyProgress = 0;
-                    user.dailyClaimed = false;
-                    user.dailyChallengeType = "win_games";
-                    user.dailyTarget = 3;
-                    user.dailyReward = 250;
-                    await dbFirebase
-                        .ref("users/" + username)
-                        .update({
-                            dailyDate: user.dailyDate,
-                            dailyProgress: 0,
-                            dailyClaimed: false,
-                            dailyChallengeType: "win_games",
-                            dailyTarget: 3,
-                            dailyReward: 15
-                        });
+                    const challenge = GenerateDailyChallenge();
+
+                    user.dailyChallengeType = challenge.type;
+                    user.dailyChallengeTarget = challenge.target;
+                    user.dailyChallengeReward = challenge.reward;
+                    user.dailyChallengeProgress = 0;
+                    user.dailyChallengeClaimed = false;
+                    user.dailyChallengeDate = getToday();
+
+                    user.dailyRewardClaimed = false;
+                    user.dailyRewardDate = getToday();
+                    
+                    await dbFirebase.ref("users/" + username).update({
+                        dailyChallengeType: challenge.type,
+                        dailyChallengeTarget: challenge.target,
+                        dailyChallengeReward: challenge.reward,
+                        dailyChallengeProgress: 0,
+                        dailyChallengeClaimed: false,
+                        dailyChallengeDate: getToday(),
+                        dailyRewardClaimed: false,
+                        dailyRewardCoins: getToday(),
+                    });
                 }
                 
                 const ok = await bcrypt.compare(data.password, user.password);
@@ -561,10 +638,13 @@ wss.on("connection", ws => {
                     level: user.level,
 
                     dailyChallengeType: user.dailyChallengeType,
-                    dailyTarget: user.dailyTarget,
-                    dailyProgress: user.dailyProgress,
-                    dailyReward: user.dailyReward,
-                    dailyClaimed: user.dailyClaimed,
+                    dailyChallengeTarget: user.dailyTarget,
+                    dailyChallengeProgress: user.dailyProgress,
+                    dailyChallengeReward: user.dailyReward,
+                    dailyChallengeClaimed: user.dailyClaimed,
+
+                    dailyRewardClaimed: user.dailyRewardClaimed,
+                    dailyRewardCoins: user.dailyRewardCoins,
                     
                     last5: user.last5,
             
