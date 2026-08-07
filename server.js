@@ -15,6 +15,11 @@ const wss = new WebSocket.Server({
     server
 });
 
+function getToday()
+{
+    return new Date().toISOString().split("T")[0];
+}
+
 let rooms = {};
 let matchmakingQueue = [];
 
@@ -402,6 +407,16 @@ wss.on("connection", ws => {
                     experience: 0,
                     level: 1,
                     vip: false,
+
+                    // 
+                    dailyChallengeType: "win_games",
+                    dailyTarget: 3,
+                    dailyProgress: 0,
+                    dailyReward: 15,
+                    dailyClaimed: false,
+                    dailyDate: getToday(),
+                    
+                    last5: []
                 
                     // Social
                     friends: [],
@@ -460,6 +475,22 @@ wss.on("connection", ws => {
                 if (user.theme === undefined) updates.theme = "dark";
                 if (user.language === undefined) updates.language = "English";
                 if (user.sounds === undefined) updates.sounds = true;
+
+                // if (user.games === undefined) updates.games = 0; // gamesPlayed 
+                if (user.wins === undefined) updates.wins = 0;
+                if (user.losses === undefined) updates.losses = 0;
+                if (user.draws === undefined) updates.draws = 0;
+                
+                if (user.rating === undefined) updates.rating = 1000;
+                
+                if (user.dailyChallengeType === undefined) updates.dailyChallengeType = "win_games";
+                if (user.dailyTarget === undefined) updates.dailyTarget = 3;
+                if (user.dailyProgress === undefined) updates.dailyProgress = 0;
+                if (user.dailyReward === undefined) updates.dailyReward = 15;
+                if (user.dailyClaimed === undefined) updates.dailyClaimed = false;
+                if (user.dailyDate === undefined) updates.dailyDate = getToday();
+                
+                if (user.last5 === undefined) updates.last5 = [];
                 
                 if (Object.keys(updates).length > 0) {
                     await dbFirebase.ref("users/" + username).update(updates);
@@ -507,6 +538,14 @@ wss.on("connection", ws => {
                     coins: user.coins,
                     experience: user.experience,
                     level: user.level,
+
+                    dailyChallengeType: user.dailyChallengeType,
+                    dailyTarget: user.dailyTarget,
+                    dailyProgress: user.dailyProgress,
+                    dailyReward: user.dailyReward,
+                    dailyClaimed: user.dailyClaimed,
+                    
+                    last5: user.last5
             
                     vip: user.vip,
             
