@@ -582,6 +582,7 @@ wss.on("connection", ws => {
 
                     user.dailyRewardClaimed = false;
                     user.dailyRewardDate = getToday();
+                    user.dailyRewardCoins = 12;
                     
                     await dbFirebase.ref("users/" + username).update({
                         dailyChallengeType: challenge.type,
@@ -591,7 +592,7 @@ wss.on("connection", ws => {
                         dailyChallengeClaimed: false,
                         dailyChallengeDate: getToday(),
                         dailyRewardClaimed: false,
-                        dailyRewardCoins: getToday(),
+                        dailyRewardCoins: 12,
                     });
                 }
                 
