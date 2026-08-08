@@ -639,10 +639,10 @@ wss.on("connection", ws => {
                     level: user.level,
 
                     dailyChallengeType: user.dailyChallengeType,
-                    dailyChallengeTarget: user.dailyTarget,
-                    dailyChallengeProgress: user.dailyProgress,
-                    dailyChallengeReward: user.dailyReward,
-                    dailyChallengeClaimed: user.dailyClaimed,
+                    dailyChallengeTarget: user.dailyChallengeTarget,
+                    dailyChallengeProgress: user.dailyChallengeProgress,
+                    dailyChallengeReward: user.dailyChallengeReward,
+                    dailyChallengeClaimed: user.dailyChallengeClaimed,
 
                     dailyRewardClaimed: user.dailyRewardClaimed,
                     dailyRewardCoins: user.dailyRewardCoins,
