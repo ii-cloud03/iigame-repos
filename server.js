@@ -569,7 +569,7 @@ wss.on("connection", ws => {
                 }
 
                 // Daily reset
-                if (user.dailyDate !== getToday())
+                if (user.dailyRewardDate !== getToday())
                 {
                     const challenge = GenerateDailyChallenge();
 
