@@ -179,6 +179,48 @@ async function UpdateDailyChallengeProgress(username, result, isFriendGame = fal
     };
 }
 
+function SendDailyChallengeProgress(ws, challenge)
+{
+    if (!ws || ws.readyState !== WebSocket.OPEN)
+        return;
+
+    if (!challenge)
+        return;
+
+    ws.send(JSON.stringify({
+        type: "daily_challenge_progress",
+        progress: challenge.progress,
+        target: challenge.target,
+        completed: challenge.completed
+    }));
+}
+
+async function IsFriends(username1, username2)
+{
+    if (!username1 || !username2)
+        return false;
+
+    const user1 = username1.toLowerCase();
+    const user2 = username2.toLowerCase();
+
+    const snap1 = await dbFirebase.ref("users/" + user1 + "/friends").once("value");
+    const snap2 = await dbFirebase.ref("users/" + user2 + "/friends").once("value");
+
+    if (!snap1.exists() || !snap2.exists())
+        return false;
+
+    const friends1 = snap1.val();
+    const friends2 = snap2.val();
+
+    if (!Array.isArray(friends1) || !Array.isArray(friends2))
+        return false;
+    
+    const user1HasUser2 = friends1.some(friend => String(friend).toLowerCase() === user2);
+    const user2HasUser1 = friends2.some(friend => String(friend).toLowerCase() === user1);
+
+    return user1HasUser2 && user2HasUser1;
+}
+
 let rooms = {};
 let matchmakingQueue = [];
 
@@ -315,7 +357,23 @@ async function FinishGame(roomId)
     StopRoomTimer(room);
 
     try {
-        await UpdateStats(room);
+        // =================================
+        // FRIEND CHECK
+        // =================================
+
+        let isFriendGame = false;
+
+        if (room.players.length >= 2)
+        {
+            const player1 = room.players[0];
+            const player2 = room.players[1];
+
+            isFriendGame = await IsFriends(player1.username, player2.username);
+        }
+        // =================================
+        // UPDATE STATS + DAILY CHALLENGE
+        // =================================
+        await UpdateStats(room, isFriendGame); //  await UpdateStats(room); th
         await SaveMatch(room);
         broadcastState(roomId);
         broadcastTimer(roomId);
@@ -421,7 +479,7 @@ function checkWinner(room) {
 }
 
 /////
-async function UpdateStats(room)
+async function UpdateStats(room, isFriendGame = false)
 {
     if (room.winner === "DRAW")
     {
@@ -429,12 +487,20 @@ async function UpdateStats(room)
         {
             await dbFirebase.ref("users/" + p.username.toLowerCase()).update({
                 draws: admin.database.ServerValue.increment(1),
-                coins: admin.database.ServerValue.increment(5)
+                coins: admin.database.ServerValue.increment(4)
             });
+            
+            // Daily Challenge
+            const challenge = await UpdateDailyChallengeProgress(
+                p.username,
+                "D",
+                isFriendGame
+            );
 
             if (p.ws.readyState === WebSocket.OPEN)
             {
                 await SendProfile(p.ws, p.username);
+                SendDailyChallengeProgress(p.ws, challenge); /////
             }
         }
 
@@ -448,12 +514,21 @@ async function UpdateStats(room)
     {
         await dbFirebase.ref("users/" + winner.username.toLowerCase()).update({
             wins: admin.database.ServerValue.increment(1),
-            coins: admin.database.ServerValue.increment(10),
-            rating: admin.database.ServerValue.increment(25)
+            coins: admin.database.ServerValue.increment(4),
+            rating: admin.database.ServerValue.increment(8)
         });
+
+        // Daily Challenge
+        const winnerChallenge =
+            await UpdateDailyChallengeProgress(
+                winner.username,
+                "W",
+                isFriendGame
+            );
 
         if (winner.ws.readyState === WebSocket.OPEN) {
             await SendProfile(winner.ws, winner.username);
+            SendDailyChallengeProgress(winner.ws, winnerChallenge); //// 
         }
     }
 
@@ -461,12 +536,21 @@ async function UpdateStats(room)
     {
         await dbFirebase.ref("users/" + loser.username.toLowerCase()).update({
             losses: admin.database.ServerValue.increment(1),
-            coins: admin.database.ServerValue.increment(2),
-            rating: admin.database.ServerValue.increment(-10)
+            coins: admin.database.ServerValue.increment(0),
+            rating: admin.database.ServerValue.increment(-7)
         });
+
+        // Daily Challenge
+        const loserChallenge =
+            await UpdateDailyChallengeProgress(
+                loser.username,
+                "L",
+                isFriendGame
+            );
 
         if (loser.ws.readyState === WebSocket.OPEN) {
             await SendProfile(loser.ws, loser.username);
+            SendDailyChallengeProgress(loser.ws, loserChallenge);   ///
         }
     }
 }
