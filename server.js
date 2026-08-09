@@ -72,6 +72,113 @@ function GenerateDailyChallenge()
     ];
 }
 
+async function UpdateDailyChallengeProgress(username, result, isFriendGame = false)
+{
+    const ref = dbFirebase.ref("users/" + username);
+    const snap = await ref.once("value");
+
+    if (!snap.exists())
+        return null;
+
+    const user = snap.val();
+
+    // Challenge sanasi o'tgan bo'lsa,
+    // yangi kun uchun yangi challenge yaratamiz
+    if (user.dailyChallengeDate !== getToday())
+    {
+        const challenge = GenerateDailyChallenge();
+
+        user.dailyChallengeType = challenge.type;
+        user.dailyChallengeTarget = challenge.target;
+        user.dailyChallengeProgress = 0;
+        user.dailyChallengeReward = challenge.reward;
+        user.dailyChallengeClaimed = false;
+        user.dailyChallengeDate = getToday();
+
+        await ref.update({
+            dailyChallengeType: challenge.type,
+            dailyChallengeTarget: challenge.target,
+            dailyChallengeProgress: 0,
+            dailyChallengeReward: challenge.reward,
+            dailyChallengeClaimed: false,
+            dailyChallengeDate: getToday()
+        });
+    }
+
+    let shouldIncrease = false;
+
+    switch (user.dailyChallengeType)
+    {
+        // Har qanday o'yinda yutish
+        case "win_games":
+            if (result === "W")
+                shouldIncrease = true;
+            break;
+            
+        // Har qanday o'yinni o'ynash
+        case "play_games":
+            shouldIncrease = true;
+            break;
+            
+        // Do'st bilan o'ynab yutish
+        case "win_friend":
+            if (isFriendGame && result === "W")
+                shouldIncrease = true;
+            break;
+
+        // Do'st bilan o'ynash
+        case "play_friend":
+            if (isFriendGame)
+                shouldIncrease = true;
+            break;
+
+        // Durang o'yin
+        case "draw_games":
+            if (result === "D")
+                shouldIncrease = true;
+
+            break;
+    }
+
+    // Bu o'yin joriy challengega mos kelmasa
+    if (!shouldIncrease)
+    {
+        return {
+            progress: user.dailyChallengeProgress,
+            target: user.dailyChallengeTarget,
+            completed:
+                user.dailyChallengeProgress >=
+                user.dailyChallengeTarget
+        };
+    }
+
+    // Challenge allaqachon tugagan bo'lsa,
+    // progressni yana oshirmaymiz
+    if (user.dailyChallengeProgress >= user.dailyChallengeTarget)
+    {
+        return {
+            progress: user.dailyChallengeProgress,
+            target: user.dailyChallengeTarget,
+            completed: true
+        };
+    }
+
+    user.dailyChallengeProgress++;
+
+    // Targetdan oshib ketmasin
+    if (user.dailyChallengeProgress > user.dailyChallengeTarget) {
+        user.dailyChallengeProgress = user.dailyChallengeTarget;
+    }
+
+    await ref.update({dailyChallengeProgress: user.dailyChallengeProgress});
+
+    return {
+        progress: user.dailyChallengeProgress,
+        target: user.dailyChallengeTarget,
+        completed: user.dailyChallengeProgress >= user.dailyChallengeTarget
+    };
+}
+
 let rooms = {};
 let matchmakingQueue = [];
 
