@@ -866,6 +866,76 @@ wss.on("connection", ws => {
                 return;
             }
 
+            else if (data.type === "claim_daily_challenge")
+            {
+                const username = ws.username;
+            
+                if (!username)
+                    return;
+            
+                const ref = dbFirebase.ref("users/" + username.toLowerCase());
+                const snap = await ref.once("value");
+            
+                if (!snap.exists())
+                    return;
+            
+                const user = snap.val();
+            
+                // Yangi kun bo'lsa, bu yerda claim qilmaymiz.
+                // Login paytida daily challenge reset qilinadi.
+                if (user.dailyChallengeDate !== getToday())
+                    return;
+            
+                // Allaqachon olingan bo'lsa — hech narsa qilmaymiz
+                if (user.dailyChallengeClaimed === true)
+                    return;
+            
+                // Challenge hali bajarilmagan bo'lsa — hech narsa qilmaymiz
+                if ((user.dailyChallengeProgress || 0) < (user.dailyChallengeTarget || 0))
+                    return;
+            
+                // REWARD
+                const reward = user.dailyChallengeReward || 0;
+                const newCoins = (user.coins || 0) + reward;
+                await ref.update({coins: newCoins, dailyChallengeClaimed: true});
+            
+                // SUCCESS
+                ws.send(JSON.stringify({type: "daily_challenge_claimed", reward: reward, coins: newCoins}));
+            }
+
+            if (data.type === "claim_daily_reward")
+            {
+                const username = ws.username;
+            
+                if (!username)
+                    return;
+            
+                const ref = dbFirebase.ref("users/" + username.toLowerCase());
+                const snap = await ref.once("value");
+            
+                if (!snap.exists())
+                    return;
+            
+                const user = snap.val();
+            
+                // Yangi kun bo'lmasa hammasi joyida,
+                // login paytida reset qilingan bo'ladi.
+                if (user.dailyRewardDate !== getToday())
+                    return;
+            
+                // Allaqachon olingan
+                if (user.dailyRewardClaimed === true)
+                    return;
+            
+                // REWARD
+                const reward = user.dailyRewardCoins || 12;
+                const newCoins = (user.coins || 0) + reward;
+                await ref.update({coins: newCoins, dailyRewardClaimed: true});
+            
+                // SUCCESS
+                ws.send(JSON.stringify({type: "daily_reward_claimed", reward: reward, coins: newCoins}));
+            }
+
             else if (data.type === "get_home_data")
             {
                 if (!ws.username)
