@@ -221,6 +221,78 @@ async function IsFriends(username1, username2)
     return user1HasUser2 && user2HasUser1;
 }
 
+// Friends
+async function SendFriendsList(ws, username)
+{
+    if (!ws || ws.readyState !== WebSocket.OPEN)
+        return;
+
+    const snap = await dbFirebase.ref("users/" + username.toLowerCase()).once("value");
+
+    if (!snap.exists())
+        return;
+
+    const user = snap.val();
+
+    const friends = Array.isArray(user.friends) ? user.friends : [];
+    const result = [];
+
+    for (const friendName of friends)
+    {
+        const friendUsername = String(friendName).toLowerCase();
+        const friendSnap = await dbFirebase.ref("users/" + friendUsername).once("value");
+
+        if (!friendSnap.exists())
+            continue;
+
+        const friend = friendSnap.val();
+        let isOnline = false;
+        const friendWs = onlinePlayers[friendUsername];
+
+        if (friendWs && friendWs.readyState === WebSocket.OPEN) {
+            isOnline = true;
+        }
+
+        result.push({
+            username: friend.username,
+            avatar: friend.avatar || "default",
+            rating: friend.rating || 1000,
+            online: isOnline
+        });
+    }
+
+    ws.send(JSON.stringify({type: "friends_list", friends: result}));
+}
+
+async function SendFriendRequests(ws, username)
+{
+    if (!ws || ws.readyState !== WebSocket.OPEN)
+        return;
+
+    const snap = await dbFirebase.ref("users/" + username.toLowerCase() + "/friendRequests").once("value");
+    const requests = snap.exists() && Array.isArray(snap.val()) ? snap.val() : [];
+    const result = [];
+
+    for (const requesterName of requests)
+    {
+        const requesterUsername = String(requesterName).toLowerCase();
+        const requesterSnap = await dbFirebase.ref("users/" + requesterUsername).once("value");
+
+        if (!requesterSnap.exists())
+            continue;
+
+        const requester = requesterSnap.val();
+
+        result.push({
+            username: requester.username,
+            avatar: requester.avatar || "default",
+            rating: requester.rating || 1000
+        });
+    }
+
+    ws.send(JSON.stringify({type: "friend_requests", requests: result}));
+}
+
 let rooms = {};
 let matchmakingQueue = [];
 
@@ -982,6 +1054,19 @@ wss.on("connection", ws => {
             else if(data.type === "get_friends")
             {
                 // ...
+                if (!ws.username)
+                    return;
+            
+                await SendFriendsList(ws, ws.username);
+            }
+
+            else if(data.type === "get_friend_requests")
+            {
+                // ...
+                if (!ws.username)
+                    return;
+            
+                await SendFriendRequests(ws, ws.username);
             }
 
             else if(data.type === "get_notifications")
