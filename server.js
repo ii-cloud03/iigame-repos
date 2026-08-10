@@ -1062,6 +1062,7 @@ wss.on("connection", ws => {
 
             else if(data.type === "get_friend_requests")
             {
+                console.log("GET FRIEND REQUESTS:", ws.username);
                 // ...
                 if (!ws.username)
                     return;
