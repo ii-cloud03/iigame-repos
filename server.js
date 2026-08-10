@@ -269,8 +269,24 @@ async function SendFriendRequests(ws, username)
     if (!ws || ws.readyState !== WebSocket.OPEN)
         return;
 
+    console.log("1. SendFriendRequests:", username);
+    const path =
+        "users/" +
+        username.toLowerCase() +
+        "/friendRequests";
+
+    console.log("2. Firebase path:", path);
+    
     const snap = await dbFirebase.ref("users/" + username.toLowerCase() + "/friendRequests").once("value");
+
+    console.log("3. exists:", snap.exists());
+    console.log("4. value:", snap.val());
+    
     const requests = snap.exists() && Array.isArray(snap.val()) ? snap.val() : [];
+
+    console.log("5. requests:", requests);
+    console.log("6. count:", requests.length);
+    
     const result = [];
 
     for (const requesterName of requests)
@@ -290,7 +306,13 @@ async function SendFriendRequests(ws, username)
         });
     }
 
+    console.log("7. result:", result);
+    console.log(
+        "8. sending:",
+        JSON.stringify(message)
+    );
     ws.send(JSON.stringify({type: "friend_requests", requests: result}));
+    console.log("9. SENT");
 }
 
 let rooms = {};
