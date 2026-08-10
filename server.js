@@ -247,7 +247,7 @@ async function SendFriendsList(ws, username)
 
         const friend = friendSnap.val();
         let isOnline = false;
-        const friendWs = onlinePlayers[friendUsername];
+        const friendWs = onlineUsers[friendUsername];
 
         if (friendWs && friendWs.readyState === WebSocket.OPEN) {
             isOnline = true;
