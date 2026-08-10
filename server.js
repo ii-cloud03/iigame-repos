@@ -307,11 +307,24 @@ async function SendFriendRequests(ws, username)
     }
 
     console.log("7. result:", result);
+
+    const message = {
+        type: "friend_requests",
+        requests: result
+    };
+
     console.log(
         "8. sending:",
         JSON.stringify(message)
     );
-    ws.send(JSON.stringify({type: "friend_requests", requests: result}));
+
+    ws.send(JSON.stringify(message));
+    
+    // console.log(
+    //     "8. sending:",
+    //     JSON.stringify(message)
+    // );
+    // ws.send(JSON.stringify({type: "friend_requests", requests: result}));
     console.log("9. SENT");
 }
 
