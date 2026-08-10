@@ -1069,6 +1069,99 @@ wss.on("connection", ws => {
                 await SendFriendRequests(ws, ws.username);
             }
 
+            else if (data.type === "accept_friend_request")
+            {
+                const receiver = ws.username;
+            
+                if (!receiver) return;
+            
+                const sender = String(msg.username || "").trim().toLowerCase();
+                if (!sender) return;
+            
+                const receiverLower = receiver.toLowerCase();
+            
+                if (sender === receiverLower) return;
+                
+                // REQUEST TEKSHIRISH
+                const receiverRef = dbFirebase.ref("users/" + receiverLower);
+                const receiverSnap = await receiverRef.once("value");
+            
+                if (!receiverSnap.exists())
+                    return;
+            
+                const receiverUser = receiverSnap.val();
+                const requests = Array.isArray(receiverUser.friendRequests) ? receiverUser.friendRequests : [];
+                const requestExists = requests.some(x => String(x).toLowerCase() === sender);
+            
+                if (!requestExists) return;
+                
+                // FRIENDS
+                const receiverFriends = Array.isArray(receiverUser.friends) ? receiverUser.friends : [];
+            
+                if (!receiverFriends.some(x => String(x).toLowerCase() === sender)) {
+                    receiverFriends.push(sender);
+                }
+            
+                const senderRef = dbFirebase.ref("users/" + sender);
+                const senderSnap = await senderRef.once("value");
+            
+                if (!senderSnap.exists())
+                    return;
+            
+                const senderUser = senderSnap.val();
+                const senderFriends = Array.isArray(senderUser.friends) ? senderUser.friends : [];
+            
+                if (!senderFriends.some(x => String(x).toLowerCase() === receiverLower)) {
+                    senderFriends.push(receiverLower);
+                }
+                
+                // REQUEST O'CHIRISH
+                const newRequests = requests.filter(x => String(x).toLowerCase() !== sender);
+                
+                // FIREBASE
+                await receiverRef.update({friends: receiverFriends, friendRequests: newRequests});
+                await senderRef.update({friends: senderFriends});
+                
+                // RECEIVER
+                ws.send(JSON.stringify({type: "friend_request_accepted", username: senderUser.username}));
+                
+                await SendFriendsList(ws, receiver);
+                await SendFriendRequests(ws, receiver);
+                
+                // SENDER ONLINE BO'LSA
+                const senderWs = onlinePlayers[sender];
+                
+                if (senderWs && senderWs.readyState === WebSocket.OPEN) {
+                    senderWs.send(JSON.stringify({type: "friend_request_accepted", username: receiver}));
+                    await SendFriendsList(senderWs, sender);
+                }
+            }
+
+            else if (data.type === "reject_friend_request")
+            {
+                const receiver = ws.username;
+            
+                if (!receiver) return;
+            
+                const sender = String(msg.username || "").trim().toLowerCase();
+                if (!sender) return;
+            
+                const receiverRef = dbFirebase.ref("users/" + receiver.toLowerCase());
+                const snap = await receiverRef.once("value");
+            
+                if (!snap.exists()) return;
+            
+                const user = snap.val();
+                const requests = Array.isArray(user.friendRequests) ? user.friendRequests : [];
+                const newRequests = requests.filter(x => String(x).toLowerCase() !== sender);
+                
+                await receiverRef.update({friendRequests: newRequests});
+                
+                ws.send(JSON.stringify({type: "friend_request_rejected", username: sender}));
+                
+                await SendFriendRequests(ws, receiver);
+            }
+
             else if(data.type === "get_notifications")
             {
                 // ...
