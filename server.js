@@ -1097,7 +1097,6 @@ wss.on("connection", ws => {
 
             else if(data.type === "get_friend_requests")
             {
-                console.log("GET FRIEND REQUESTS:", ws.username);
                 // ...
                 if (!ws.username)
                     return;
@@ -1111,7 +1110,7 @@ wss.on("connection", ws => {
             
                 if (!receiver) return;
             
-                const sender = String(msg.username || "").trim().toLowerCase();
+                const sender = String(data.username || "").trim().toLowerCase();
                 if (!sender) return;
             
                 const receiverLower = receiver.toLowerCase();
@@ -1179,7 +1178,7 @@ wss.on("connection", ws => {
             
                 if (!receiver) return;
             
-                const sender = String(msg.username || "").trim().toLowerCase();
+                const sender = String(data.username || "").trim().toLowerCase();
                 if (!sender) return;
             
                 const receiverRef = dbFirebase.ref("users/" + receiver.toLowerCase());
