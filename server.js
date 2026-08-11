@@ -1208,7 +1208,7 @@ wss.on("connection", ws => {
                 await SendFriendsList(ws, username);
                 
                 // FRIEND ONLINE BO'LSA
-                const friendWs = onlinePlayers[friendUsername];
+                const friendWs = onlineUsers[friendUsername];
             
                 if (friendWs && friendWs.readyState === WebSocket.OPEN) {
                     await SendFriendsList(friendWs, friendUsername);
