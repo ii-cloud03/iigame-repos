@@ -247,7 +247,7 @@ async function SendFriendsList(ws, username)
 
         const friend = friendSnap.val();
         let isOnline = false;
-        const friendWs = onlineUsers[friendUsername];
+        const friendWs = onlineUsers.get(friendUsername.toLowerCase());
 
         if (friendWs && friendWs.readyState === WebSocket.OPEN) {
             isOnline = true;
@@ -879,7 +879,7 @@ wss.on("connection", ws => {
                     return;
                 }
 
-                onlineUsers.set(user.username, ws);
+                onlineUsers.set(user.username.toLowerCase(), ws);
                 ws.username = user.username;
 
                 // Firebase'da foydalanuvchini online deb belgilash
@@ -1208,7 +1208,7 @@ wss.on("connection", ws => {
                 await SendFriendsList(ws, username);
                 
                 // FRIEND ONLINE BO'LSA
-                const friendWs = onlineUsers[friendUsername];
+                const friendWs = onlineUsers.get(friendUsername);
             
                 if (friendWs && friendWs.readyState === WebSocket.OPEN) {
                     await SendFriendsList(friendWs, friendUsername);
@@ -1831,10 +1831,10 @@ wss.on("connection", ws => {
 
         if (ws.username)
         {
-            const current = onlineUsers.get(ws.username);
+            const current = onlineUsers.get(ws.username.toLowerCase());
 
             if (current === ws) {
-                onlineUsers.delete(ws.username);
+                onlineUsers.delete(ws.username.toLowerCase());
                 try
                 {
                     await dbFirebase
