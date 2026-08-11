@@ -1215,6 +1215,57 @@ wss.on("connection", ws => {
                 }
             }
 
+            else if (data.type === "search_user")
+            {
+                if (!ws.username) return;
+            
+                const searchUsername = String(data.username || "").trim().toLowerCase();
+                if (!searchUsername) return;
+            
+                if (searchUsername === ws.username.toLowerCase())
+                {
+                    ws.send(JSON.stringify({
+                        type: "user_search_result",
+                        found: false,
+                        reason: "self"
+                    }));
+            
+                    return;
+                }
+            
+                const snap = await dbFirebase.ref("users/" + searchUsername).once("value");
+                if (!snap.exists())
+                {
+                    ws.send(JSON.stringify({type: "user_search_result", found: false}));
+                    return;
+                }
+            
+                const user = snap.val();
+            
+                const friends = Array.isArray(user.friends) ? user.friends : [];
+                const friendRequests = Array.isArray(user.friendRequests) ? user.friendRequests : [];
+                const currentSnap = await dbFirebase.ref("users/" + ws.username.toLowerCase()).once("value");
+                const currentUser = currentSnap.exists() ? currentSnap.val() : {};
+                const currentFriends = Array.isArray(currentUser.friends) ? currentUser.friends : [];
+                const currentRequests = Array.isArray(currentUser.friendRequests) ? currentUser.friendRequests : [];
+                const alreadyFriend = currentFriends.some(x => String(x).toLowerCase() === searchUsername);
+                const requestAlreadySent = friendRequests.some(x => String(x).toLowerCase() === ws.username.toLowerCase());
+                const requestAlreadyReceived = currentRequests.some(x => String(x).toLowerCase() === searchUsername);
+            
+                ws.send(JSON.stringify({
+                    type: "user_search_result",
+                    found: true,
+            
+                    username: user.username,
+                    avatar: user.avatar || "default",
+                    rating: user.rating || 1000,
+            
+                    alreadyFriend: alreadyFriend,
+                    requestAlreadySent: requestAlreadySent,
+                    requestAlreadyReceived: requestAlreadyReceived
+                }));
+            }
+
             else if(data.type === "get_notifications")
             {
                 // ...
