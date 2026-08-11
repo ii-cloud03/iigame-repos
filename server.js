@@ -1266,6 +1266,65 @@ wss.on("connection", ws => {
                 }));
             }
 
+            else if (data.type === "send_friend_request")
+            {
+                if (!ws.username)
+                    return;
+            
+                const senderUsername = ws.username.toLowerCase();
+                const receiverUsername = String(data.username || "").trim().toLowerCase();
+            
+                if (!receiverUsername) return;
+                if (senderUsername === receiverUsername)
+                    return;
+
+                // RECEIVER
+                const receiverRef = dbFirebase.ref("users/" + receiverUsername);
+                const receiverSnap = await receiverRef.once("value");
+            
+                if (!receiverSnap.exists()) return;
+                const receiver = receiverSnap.val();
+
+                // SENDER
+                const senderRef = dbFirebase.ref("users/" + senderUsername);
+                const senderSnap = await senderRef.once("value");
+                if (!senderSnap.exists()) return;
+                const sender = senderSnap.val();
+                const receiverFriends = Array.isArray(receiver.friends) ? receiver.friends : [];
+                const receiverRequests = Array.isArray(receiver.friendRequests) ? receiver.friendRequests : [];
+                
+                // Already friends
+                if (receiverFriends.some(x => String(x).toLowerCase() === senderUsername)) {
+                    return;
+                }
+                
+                // Request already exists
+                if (receiverRequests.some(x => String(x).toLowerCase() === senderUsername)) {
+                    return;
+                }
+                
+                // ADD REQUEST
+                receiverRequests.push(senderUsername);
+                await receiverRef.update({friendRequests: receiverRequests});
+
+                // SENDER     
+                ws.send(JSON.stringify({type: "friend_request_sent", username: receiver.username}));
+
+                // RECEIVER ONLINE
+                const receiverWs = onlineUsers.get(receiverUsername);
+            
+                if (receiverWs && receiverWs.readyState === WebSocket.OPEN) {
+                    receiverWs.send(JSON.stringify({
+                        type: "friend_request_received",
+                        username: sender.username,
+                        avatar: sender.avatar || "default",
+                        rating: sender.rating || 1000
+                    }));
+            
+                    await SendFriendRequests(receiverWs, receiverUsername);
+                }
+            }
+
             else if(data.type === "get_notifications")
             {
                 // ...
