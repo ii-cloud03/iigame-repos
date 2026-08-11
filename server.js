@@ -1169,6 +1169,52 @@ wss.on("connection", ws => {
                 await SendFriendRequests(ws, receiver);
             }
 
+            else if (data.type === "remove_friend")
+            {
+                const username = ws.username;
+                if (!username) return;
+            
+                const friendUsername = String(data.username || "").trim().toLowerCase();
+                const currentUsername = username.toLowerCase();
+                
+                if (!friendUsername) return;
+                if (currentUsername === friendUsername) return;
+                
+                // CURRENT USER
+                const currentRef = dbFirebase.ref("users/" + currentUsername);
+                const currentSnap = await currentRef.once("value");
+            
+                if (!currentSnap.exists()) return;
+                const currentUser = currentSnap.val();
+                const currentFriends = Array.isArray(currentUser.friends) ? currentUser.friends : [];
+                
+                // FRIEND USER
+                const friendRef = dbFirebase.ref("users/" + friendUsername);
+                const friendSnap = await friendRef.once("value");
+            
+                if (!friendSnap.exists()) return;
+                const friendUser = friendSnap.val();
+                const friendFriends = Array.isArray(friendUser.friends) ? friendUser.friends : [];
+                
+                // IKKALA TOMONDAN O'CHIRISH
+                const newCurrentFriends = currentFriends.filter(x => String(x).toLowerCase() !== friendUsername); 
+                const newFriendFriends = friendFriends.filter(x => String(x).toLowerCase() !== currentUsername);
+            
+                // FIREBASE UPDATE
+                await currentRef.update({friends: newCurrentFriends});
+                await friendRef.update({friends: newFriendFriends});
+            
+                // CURRENT USERGA YANGI LIST
+                await SendFriendsList(ws, username);
+                
+                // FRIEND ONLINE BO'LSA
+                const friendWs = onlinePlayers[friendUsername];
+            
+                if (friendWs && friendWs.readyState === WebSocket.OPEN) {
+                    await SendFriendsList(friendWs, friendUsername);
+                }
+            }
+
             else if(data.type === "get_notifications")
             {
                 // ...
