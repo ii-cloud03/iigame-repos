@@ -300,6 +300,32 @@ async function SendFriendRequests(ws, username)
     ws.send(JSON.stringify({type: "friend_requests", requests: result}));
 }
 
+async function UpdateLast5(username, result)
+{
+    const usernameLower = username.toLowerCase();
+    const userRef = dbFirebase.ref("users/" + usernameLower);
+    const snap = await userRef.once("value");
+    if (!snap.exists()) return;
+    const user = snap.val();
+    let last5 = Array.isArray(user.last5) ? [...user.last5] : [];
+
+    // Faqat W / L / D
+    if (result !== "W" && result !== "L" && result !== "D")
+        return;
+
+    // 5 taga yetgan bo'lsa,
+    // eng eski natijani olib tashlaymiz
+    if (last5.length >= 5)
+    {
+        last5.shift();
+    }
+
+    // Yangi natija oxiriga
+    last5.push(result);
+
+    await userRef.update({last5: last5});
+}
+
 let rooms = {};
 let matchmakingQueue = [];
 
@@ -568,6 +594,9 @@ async function UpdateStats(room, isFriendGame = false)
                 draws: admin.database.ServerValue.increment(1),
                 coins: admin.database.ServerValue.increment(4)
             });
+
+            // last5
+            await UpdateLast5(p.username, "D");
             
             // Daily Challenge
             const challenge = await UpdateDailyChallengeProgress(
@@ -597,6 +626,9 @@ async function UpdateStats(room, isFriendGame = false)
             rating: admin.database.ServerValue.increment(8)
         });
 
+        // last5
+        await UpdateLast5(winner.username, "W");
+        
         // Daily Challenge
         const winnerChallenge =
             await UpdateDailyChallengeProgress(
@@ -618,6 +650,9 @@ async function UpdateStats(room, isFriendGame = false)
             coins: admin.database.ServerValue.increment(0),
             rating: admin.database.ServerValue.increment(-7)
         });
+
+        // last5
+        await UpdateLast5(loser.username, "W");
 
         // Daily Challenge
         const loserChallenge =
@@ -651,7 +686,9 @@ async function SendProfile(ws, username)
         wins: user.wins,
         losses: user.losses,
         draws: user.draws,
-        vip: user.vip
+        vip: user.vip,
+
+        last5: user.last5
     }));
 }
 //////
