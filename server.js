@@ -1089,10 +1089,9 @@ wss.on("connection", ws => {
                             : "0.0",
                     experience: user.experience || 0,
                     level: user.level || 1,
-                    vip: user.vip || false
+                    vip: user.vip || false,
+                    last5: user.last5
                 }));
-            
-                return;
             }
 
             else if(data.type === "get_friends")
