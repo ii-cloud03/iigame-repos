@@ -652,7 +652,7 @@ async function UpdateStats(room, isFriendGame = false)
         });
 
         // last5
-        await UpdateLast5(loser.username, "W");
+        await UpdateLast5(loser.username, "L");
 
         // Daily Challenge
         const loserChallenge =
