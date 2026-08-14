@@ -13,6 +13,11 @@ const bcrypt = require("bcryptjs"); ////
 
 const app = express();
 
+// pay
+app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
+//
+
 const server = http.createServer(app);
 
 const wss = new WebSocket.Server({
