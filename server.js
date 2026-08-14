@@ -18,11 +18,531 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 //
 
+app.post(
+    "/click/prepare",
+    async (req, res) =>
+    {
+        try
+        {
+            console.log(
+                "CLICK PREPARE:",
+                req.body
+            );
+
+
+            const data =
+                req.body;
+
+
+            // =========================
+            // SIGNATURE
+            // =========================
+
+            if (
+                !VerifyClickPrepareSignature(
+                    data
+                )
+            )
+            {
+                return res.json({
+                    error: -1,
+                    error_note:
+                        "SIGN CHECK FAILED!"
+                });
+            }
+
+
+            // =========================
+            // ACTION
+            // =========================
+
+            if (
+                Number(data.action) !== 0
+            )
+            {
+                return res.json({
+                    error: -3,
+                    error_note:
+                        "Action not found"
+                });
+            }
+
+
+            // =========================
+            // PAYMENT
+            // =========================
+
+            const transactionId =
+                String(
+                    data.merchant_trans_id
+                );
+
+
+            const paymentSnap =
+                await dbFirebase
+                    .ref(
+                        "payments/" +
+                        transactionId
+                    )
+                    .once("value");
+
+
+            if (!paymentSnap.exists())
+            {
+                return res.json({
+                    error: -5,
+                    error_note:
+                        "User not found"
+                });
+            }
+
+
+            const payment =
+                paymentSnap.val();
+
+
+            // =========================
+            // AMOUNT CHECK
+            // =========================
+
+            const amount =
+                Number(data.amount);
+
+
+            if (
+                amount !==
+                Number(payment.amount)
+            )
+            {
+                return res.json({
+                    error: -2,
+                    error_note:
+                        "Incorrect parameter amount"
+                });
+            }
+
+
+            // =========================
+            // ALREADY PAID
+            // =========================
+
+            if (
+                payment.status ===
+                "paid"
+            )
+            {
+                return res.json({
+                    error: -4,
+                    error_note:
+                        "Already paid"
+                });
+            }
+
+
+            // =========================
+            // SAVE CLICK DATA
+            // =========================
+
+            await dbFirebase
+                .ref(
+                    "payments/" +
+                    transactionId
+                )
+                .update({
+                    clickTransId:
+                        String(
+                            data.click_trans_id
+                        ),
+
+                    merchantPrepareId:
+                        String(
+                            data.click_trans_id
+                        ),
+
+                    status:
+                        "prepared"
+                });
+
+
+            // =========================
+            // RESPONSE
+            // =========================
+
+            return res.json({
+                click_trans_id:
+                    data.click_trans_id,
+
+                merchant_trans_id:
+                    transactionId,
+
+                merchant_prepare_id:
+                    String(
+                        data.click_trans_id
+                    ),
+
+                error:
+                    0,
+
+                error_note:
+                    "Success"
+            });
+        }
+        catch (error)
+        {
+            console.error("CLICK PREPARE ERROR:", error);
+            return res.json({error: -7, error_note: "Failed to update user"});
+        }
+    }
+);
+
+app.post(
+    "/click/complete",
+    async (req, res) =>
+    {
+        try
+        {
+            console.log(
+                "CLICK COMPLETE:",
+                req.body
+            );
+
+
+            const data =
+                req.body;
+
+
+            // =========================
+            // SIGNATURE
+            // =========================
+
+            if (
+                !VerifyClickCompleteSignature(
+                    data
+                )
+            )
+            {
+                return res.json({
+                    error: -1,
+                    error_note:
+                        "SIGN CHECK FAILED!"
+                });
+            }
+
+
+            // =========================
+            // ACTION
+            // =========================
+
+            if (
+                Number(data.action) !== 1
+            )
+            {
+                return res.json({
+                    error: -3,
+                    error_note:
+                        "Action not found"
+                });
+            }
+
+
+            const transactionId =
+                String(
+                    data.merchant_trans_id
+                );
+
+
+            const paymentRef =
+                dbFirebase.ref(
+                    "payments/" +
+                    transactionId
+                );
+
+
+            const snap =
+                await paymentRef.once(
+                    "value"
+                );
+
+
+            if (!snap.exists())
+            {
+                return res.json({
+                    error: -6,
+                    error_note:
+                        "Transaction not found"
+                });
+            }
+
+
+            const payment =
+                snap.val();
+
+
+            // =========================
+            // DUPLICATE
+            // =========================
+
+            if (
+                payment.status ===
+                "paid"
+            )
+            {
+                return res.json({
+                    click_trans_id:
+                        data.click_trans_id,
+
+                    merchant_trans_id:
+                        transactionId,
+
+                    merchant_confirm_id:
+                        payment.merchantPrepareId,
+
+                    error:
+                        0,
+
+                    error_note:
+                        "Already completed"
+                });
+            }
+
+
+            // =========================
+            // AMOUNT
+            // =========================
+
+            if (
+                Number(data.amount) !==
+                Number(payment.amount)
+            )
+            {
+                return res.json({
+                    error: -2,
+                    error_note:
+                        "Incorrect parameter amount"
+                });
+            }
+
+
+            // =========================
+            // CLICK PAYMENT ERROR
+            // =========================
+
+            if (
+                Number(data.error) !== 0
+            )
+            {
+                await paymentRef.update({
+                    status:
+                        "cancelled",
+
+                    clickError:
+                        Number(data.error),
+
+                    clickErrorNote:
+                        String(
+                            data.error_note ||
+                            ""
+                        )
+                });
+
+                return res.json({
+                    click_trans_id:
+                        data.click_trans_id,
+
+                    merchant_trans_id:
+                        transactionId,
+
+                    merchant_confirm_id:
+                        String(
+                            data.merchant_prepare_id
+                        ),
+
+                    error:
+                        0,
+
+                    error_note:
+                        "Cancelled"
+                });
+            }
+
+
+            // =========================
+            // GET USER
+            // =========================
+
+            const username =
+                String(
+                    payment.username
+                ).toLowerCase();
+
+
+            const userRef =
+                dbFirebase.ref(
+                    "users/" +
+                    username
+                );
+
+
+            const userSnap =
+                await userRef.once(
+                    "value"
+                );
+
+
+            if (!userSnap.exists())
+            {
+                return res.json({
+                    error: -5,
+                    error_note:
+                        "User not found"
+                });
+            }
+
+
+            // =========================
+            // GIVE GEMS
+            // =========================
+
+            await userRef.update({
+                gems:
+                    admin.database.ServerValue
+                        .increment(
+                            Number(
+                                payment.gems
+                            )
+                        )
+            });
+
+
+            // =========================
+            // MARK PAID
+            // =========================
+
+            await paymentRef.update({
+                status:
+                    "paid",
+
+                clickTransId:
+                    String(
+                        data.click_trans_id
+                    ),
+
+                merchantPrepareId:
+                    String(
+                        data.merchant_prepare_id
+                    ),
+
+                completedAt:
+                    Date.now()
+            });
+
+
+            // =========================
+            // ONLINE USER
+            // =========================
+
+            const online =
+                onlineUsers.get(
+                    payment.username
+                );
+
+
+            if (
+                online &&
+                online.readyState ===
+                WebSocket.OPEN
+            )
+            {
+                await SendProfile(
+                    online,
+                    payment.username
+                );
+
+                online.send(JSON.stringify({
+                    type:
+                        "gems_purchase_success",
+
+                    gems:
+                        Number(
+                            payment.gems
+                        )
+                }));
+            }
+
+
+            return res.json({
+                click_trans_id:
+                    data.click_trans_id,
+
+                merchant_trans_id:
+                    transactionId,
+
+                merchant_confirm_id:
+                    String(
+                        data.merchant_prepare_id
+                    ),
+
+                error:
+                    0,
+
+                error_note:
+                    "Success"
+            });
+        }
+        catch (error)
+        {
+            console.error(
+                "CLICK COMPLETE ERROR:",
+                error
+            );
+
+            return res.json({
+                error: -7,
+                error_note:
+                    "Failed to update user"
+            });
+        }
+    }
+);
+
 const server = http.createServer(app);
 
 const wss = new WebSocket.Server({
     server
 });
+
+function VerifyClickPrepareSignature(data)
+{
+    const raw =
+        String(data.click_trans_id) +
+        String(data.service_id) +
+        CLICK_SECRET_KEY +
+        String(data.merchant_trans_id) +
+        String(data.amount) +
+        String(data.action) +
+        String(data.sign_time);
+
+    const expected = crypto.createHash("md5").update(raw).digest("hex");
+
+    return expected === String(data.sign_string);
+}
+
+function VerifyClickCompleteSignature(data)
+{
+    const raw =
+        String(data.click_trans_id) +
+        String(data.service_id) +
+        CLICK_SECRET_KEY +
+        String(data.merchant_trans_id) +
+        String(data.merchant_prepare_id) +
+        String(data.amount) +
+        String(data.action) +
+        String(data.sign_time);
+
+    const expected = crypto.createHash("md5").update(raw).digest("hex");
+
+    return expected === String(data.sign_string);
+}
 
 const CLICK_SERVICE_ID = process.env.CLICK_SERVICE_ID || "110075";
 const CLICK_MERCHANT_ID = process.env.CLICK_MERCHANT_ID || "";
@@ -797,7 +1317,8 @@ async function SendProfile(ws, username)
         draws: user.draws,
         vip: user.vip,
 
-        last5: user.last5
+        last5: user.last5,
+        gems: user.gems || 0
     }));
 }
 //////
@@ -874,6 +1395,7 @@ wss.on("connection", ws => {
                     losses: 0,
                     draws: 0,
                     coins: 0,
+                    gems: 0,
                     experience: 0,
                     level: 1,
                     vip: false,
@@ -942,6 +1464,7 @@ wss.on("connection", ws => {
                 if (user.bio === undefined) updates.bio = "";
                 if (user.gamesPlayed === undefined) updates.gamesPlayed = 0;
                 if (user.coins === undefined) updates.coins = 0;
+                if (user.gems === undefined) updates.gems = 0;
                 if (user.experience === undefined) updates.experience = 0;
                 if (user.level === undefined) updates.level = 1;
                 if (user.vip === undefined) updates.vip = false;
@@ -1057,6 +1580,7 @@ wss.on("connection", ws => {
                     draws: user.draws,
             
                     coins: user.coins,
+                    gems: user.gems,
                     experience: user.experience,
                     level: user.level,
 
