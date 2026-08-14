@@ -6,7 +6,7 @@ const http = require("http");
 
 /// payments
 const crypto = require("crypto");
-const querystring = require("querystring");
+const Paymentwall = require("paymentwall");
 
 /////
 const bcrypt = require("bcryptjs"); ////
@@ -18,489 +18,198 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 //
 
-app.post(
-    "/click/prepare",
-    async (req, res) =>
-    {
+// =========================
+// PAYMENTWALL
+// =========================
+
+const PAYMENTWALL_PROJECT_KEY = process.env.PAYMENTWALL_PROJECT_KEY || "";
+const PAYMENTWALL_SECRET_KEY = process.env.PAYMENTWALL_SECRET_KEY || "";
+const PAYMENTWALL_WIDGET = process.env.PAYMENTWALL_WIDGET || "";
+
+Paymentwall.Configure(Paymentwall.Base.API_VC, PAYMENTWALL_PROJECT_KEY, PAYMENTWALL_SECRET_KEY);
+
+// =========================
+// PAYMENTWALL PINGBACK
+// =========================
+
+app.get("/paymentwall/pingback", async (req, res) => {
         try
         {
-            console.log(
-                "CLICK PREPARE:",
-                req.body
-            );
+            console.log("PAYMENTWALL PINGBACK:", req.query);
 
+            const queryData = req.originalUrl.includes("?") ? req.originalUrl.split("?")[1] : "";
+            const pingback = new Paymentwall.Pingback(queryData, req.ip);
 
-            const data =
-                req.body;
-
-
-            // =========================
-            // SIGNATURE
-            // =========================
-
-            if (
-                !VerifyClickPrepareSignature(
-                    data
-                )
-            )
+            if (!pingback.validate()) // validate(true)
             {
-                return res.json({
-                    error: -1,
-                    error_note:
-                        "SIGN CHECK FAILED!"
-                });
-            }
-
-
-            // =========================
-            // ACTION
-            // =========================
-
-            if (
-                Number(data.action) !== 0
-            )
-            {
-                return res.json({
-                    error: -3,
-                    error_note:
-                        "Action not found"
-                });
-            }
-
-
-            // =========================
-            // PAYMENT
-            // =========================
-
-            const transactionId =
-                String(
-                    data.merchant_trans_id
+                console.error(
+                    "PAYMENTWALL PINGBACK INVALID:",
+                    pingback.getErrorSummary()
                 );
 
-
-            const paymentSnap =
-                await dbFirebase
-                    .ref(
-                        "payments/" +
-                        transactionId
-                    )
-                    .once("value");
-
-
-            if (!paymentSnap.exists())
-            {
-                return res.json({
-                    error: -5,
-                    error_note:
-                        "User not found"
-                });
+                return res.status(400).send(pingback.getErrorSummary());
             }
 
+            const username = String(pingback.getUserId()).toLowerCase();
 
-            const payment =
-                paymentSnap.val();
+            const ref = String(req.query.ref || "");
 
+            const type = Number(req.query.type);
 
-            // =========================
-            // AMOUNT CHECK
-            // =========================
+            const currency = Number(pingback.getVirtualCurrencyAmount());
 
-            const amount =
-                Number(data.amount);
-
-
-            if (
-                amount !==
-                Number(payment.amount)
-            )
+            if (!username || !ref)
             {
-                return res.json({
-                    error: -2,
-                    error_note:
-                        "Incorrect parameter amount"
-                });
+                return res.status(400).send("Invalid pingback");
             }
 
-
             // =========================
-            // ALREADY PAID
+            // DUPLICATE CHECK
             // =========================
 
-            if (
-                payment.status ===
-                "paid"
-            )
+            const paymentRef = dbFirebase.ref("payments/paymentwall/" + ref);
+            const paymentSnap = await paymentRef.once("value");
+
+            if (type === 0)
             {
-                return res.json({
-                    error: -4,
-                    error_note:
-                        "Already paid"
+                if (paymentSnap.exists())
+                {
+                    console.log("PAYMENTWALL DUPLICATE:", ref);
+                    return res.send("OK");
+                }
+
+                // =========================
+                // USER
+                // =========================
+
+                const userRef = dbFirebase.ref("users/" + username);
+
+                const userSnap = await userRef.once("value");
+
+                if (!userSnap.exists())
+                {
+                    console.error("PAYMENTWALL USER NOT FOUND:", username);
+
+                    return res.status(404).send("User not found");
+                }
+
+                // =========================
+                // GIVE GEMS
+                // =========================
+
+                await userRef.update({
+                    gems: admin.database.ServerValue.increment(currency)
                 });
-            }
 
+                // =========================
+                // SAVE PAYMENT
+                // =========================
 
-            // =========================
-            // SAVE CLICK DATA
-            // =========================
-
-            await dbFirebase
-                .ref(
-                    "payments/" +
-                    transactionId
-                )
-                .update({
-                    clickTransId:
+                await paymentRef.set({
+                    username: username,
+                    ref: ref,
+                    type: 0,
+                    gems: currency,
+                    status: "delivered",
+                    isTest:
                         String(
-                            data.click_trans_id
+                            req.query.is_test || "0"
                         ),
-
-                    merchantPrepareId:
-                        String(
-                            data.click_trans_id
-                        ),
-
-                    status:
-                        "prepared"
+                    createdAt: Date.now()
                 });
 
-
-            // =========================
-            // RESPONSE
-            // =========================
-
-            return res.json({
-                click_trans_id:
-                    data.click_trans_id,
-
-                merchant_trans_id:
-                    transactionId,
-
-                merchant_prepare_id:
-                    String(
-                        data.click_trans_id
-                    ),
-
-                error:
-                    0,
-
-                error_note:
-                    "Success"
-            });
-        }
-        catch (error)
-        {
-            console.error("CLICK PREPARE ERROR:", error);
-            return res.json({error: -7, error_note: "Failed to update user"});
-        }
-    }
-);
-
-app.post(
-    "/click/complete",
-    async (req, res) =>
-    {
-        try
-        {
-            console.log(
-                "CLICK COMPLETE:",
-                req.body
-            );
-
-
-            const data =
-                req.body;
-
-
-            // =========================
-            // SIGNATURE
-            // =========================
-
-            if (
-                !VerifyClickCompleteSignature(
-                    data
-                )
-            )
-            {
-                return res.json({
-                    error: -1,
-                    error_note:
-                        "SIGN CHECK FAILED!"
-                });
-            }
-
-
-            // =========================
-            // ACTION
-            // =========================
-
-            if (
-                Number(data.action) !== 1
-            )
-            {
-                return res.json({
-                    error: -3,
-                    error_note:
-                        "Action not found"
-                });
-            }
-
-
-            const transactionId =
-                String(
-                    data.merchant_trans_id
+                console.log(
+                    "PAYMENTWALL GEMS DELIVERED:",
+                    username,
+                    "+",
+                    currency,
+                    "ref:",
+                    ref
                 );
 
+                // =========================
+                // ONLINE USER
+                // =========================
 
-            const paymentRef =
-                dbFirebase.ref(
-                    "payments/" +
-                    transactionId
-                );
+                const online = onlineUsers.get(username);
 
+                if (online && online.readyState === WebSocket.OPEN)
+                {
+                    await SendProfile(online, username);
+                    online.send(JSON.stringify({type: "gems_purchase_success", gems: currency}));
+                }
 
-            const snap =
-                await paymentRef.once(
-                    "value"
-                );
-
-
-            if (!snap.exists())
-            {
-                return res.json({
-                    error: -6,
-                    error_note:
-                        "Transaction not found"
-                });
+                return res.send("OK");
             }
 
-
-            const payment =
-                snap.val();
-
-
             // =========================
-            // DUPLICATE
+            // REFUND / CHARGEBACK
             // =========================
 
-            if (
-                payment.status ===
-                "paid"
-            )
+            if (type === 2)
             {
-                return res.json({
-                    click_trans_id:
-                        data.click_trans_id,
+                if (!paymentSnap.exists())
+                {
+                    console.error("PAYMENTWALL REFUND WITHOUT ORIGINAL PAYMENT:", ref);
+                    return res.status(400).send("Original payment not found");
+                }
 
-                    merchant_trans_id:
-                        transactionId,
+                const original = paymentSnap.val();
 
-                    merchant_confirm_id:
-                        payment.merchantPrepareId,
+                if (original.status === "reversed") {
+                    return res.send("OK");
+                }
 
-                    error:
-                        0,
+                const userRef = dbFirebase.ref("users/" + username);
 
-                    error_note:
-                        "Already completed"
+                const userSnap = await userRef.once("value");
+
+                if (!userSnap.exists())
+                {
+                    return res.status(404).send("User not found");
+                }
+
+                await userRef.update({
+                    gems: admin.database.ServerValue.increment(-Number(original.gems))
                 });
-            }
 
-
-            // =========================
-            // AMOUNT
-            // =========================
-
-            if (
-                Number(data.amount) !==
-                Number(payment.amount)
-            )
-            {
-                return res.json({
-                    error: -2,
-                    error_note:
-                        "Incorrect parameter amount"
-                });
-            }
-
-
-            // =========================
-            // CLICK PAYMENT ERROR
-            // =========================
-
-            if (
-                Number(data.error) !== 0
-            )
-            {
                 await paymentRef.update({
-                    status:
-                        "cancelled",
-
-                    clickError:
-                        Number(data.error),
-
-                    clickErrorNote:
-                        String(
-                            data.error_note ||
-                            ""
-                        )
+                    status: "reversed",
+                    reversedAt: Date.now(),
+                    reason: String(req.query.reason || "")
                 });
 
-                return res.json({
-                    click_trans_id:
-                        data.click_trans_id,
+                console.log(
+                    "PAYMENTWALL GEMS REVERSED:",
+                    username,
+                    "-",
+                    original.gems,
+                    "ref:",
+                    ref
+                );
 
-                    merchant_trans_id:
-                        transactionId,
+                const online = onlineUsers.get(username);
 
-                    merchant_confirm_id:
-                        String(
-                            data.merchant_prepare_id
-                        ),
+                if (online && online.readyState === WebSocket.OPEN)
+                {
+                    await SendProfile(online, username);
 
-                    error:
-                        0,
+                    online.send(JSON.stringify({
+                            type: "gems_purchase_reversed",
+                            gems: Number(original.gems)
+                        })
+                    );
+                }
 
-                    error_note:
-                        "Cancelled"
-                });
+                return res.send("OK");
             }
 
-
-            // =========================
-            // GET USER
-            // =========================
-
-            const username =
-                String(
-                    payment.username
-                ).toLowerCase();
-
-
-            const userRef =
-                dbFirebase.ref(
-                    "users/" +
-                    username
-                );
-
-
-            const userSnap =
-                await userRef.once(
-                    "value"
-                );
-
-
-            if (!userSnap.exists())
-            {
-                return res.json({
-                    error: -5,
-                    error_note:
-                        "User not found"
-                });
-            }
-
-
-            // =========================
-            // GIVE GEMS
-            // =========================
-
-            await userRef.update({
-                gems:
-                    admin.database.ServerValue
-                        .increment(
-                            Number(
-                                payment.gems
-                            )
-                        )
-            });
-
-
-            // =========================
-            // MARK PAID
-            // =========================
-
-            await paymentRef.update({
-                status:
-                    "paid",
-
-                clickTransId:
-                    String(
-                        data.click_trans_id
-                    ),
-
-                merchantPrepareId:
-                    String(
-                        data.merchant_prepare_id
-                    ),
-
-                completedAt:
-                    Date.now()
-            });
-
-
-            // =========================
-            // ONLINE USER
-            // =========================
-
-            const online =
-                onlineUsers.get(
-                    payment.username
-                );
-
-
-            if (
-                online &&
-                online.readyState ===
-                WebSocket.OPEN
-            )
-            {
-                await SendProfile(
-                    online,
-                    payment.username
-                );
-
-                online.send(JSON.stringify({
-                    type:
-                        "gems_purchase_success",
-
-                    gems:
-                        Number(
-                            payment.gems
-                        )
-                }));
-            }
-
-
-            return res.json({
-                click_trans_id:
-                    data.click_trans_id,
-
-                merchant_trans_id:
-                    transactionId,
-
-                merchant_confirm_id:
-                    String(
-                        data.merchant_prepare_id
-                    ),
-
-                error:
-                    0,
-
-                error_note:
-                    "Success"
-            });
+            return res.send("OK");
         }
         catch (error)
         {
-            console.error(
-                "CLICK COMPLETE ERROR:",
-                error
-            );
-
-            return res.json({
-                error: -7,
-                error_note:
-                    "Failed to update user"
-            });
+            console.error("PAYMENTWALL PINGBACK ERROR:", error);
+            return res.status(500).send("Server error");
         }
     }
 );
@@ -511,134 +220,104 @@ const wss = new WebSocket.Server({
     server
 });
 
-function VerifyClickPrepareSignature(data)
-{
-    const raw =
-        String(data.click_trans_id) +
-        String(data.service_id) +
-        CLICK_SECRET_KEY +
-        String(data.merchant_trans_id) +
-        String(data.amount) +
-        String(data.action) +
-        String(data.sign_time);
-
-    const expected = crypto.createHash("md5").update(raw).digest("hex");
-
-    return expected === String(data.sign_string);
-}
-
-function VerifyClickCompleteSignature(data)
-{
-    const raw =
-        String(data.click_trans_id) +
-        String(data.service_id) +
-        CLICK_SECRET_KEY +
-        String(data.merchant_trans_id) +
-        String(data.merchant_prepare_id) +
-        String(data.amount) +
-        String(data.action) +
-        String(data.sign_time);
-
-    const expected = crypto.createHash("md5").update(raw).digest("hex");
-
-    return expected === String(data.sign_string);
-}
-
-const CLICK_SERVICE_ID = process.env.CLICK_SERVICE_ID || "110075";
-// const CLICK_MERCHANT_ID = process.env.CLICK_MERCHANT_ID || "";
-const CLICK_SECRET_KEY = process.env.CLICK_SECRET_KEY || "";
-const CLICK_RETURN_URL = process.env.CLICK_RETURN_URL || "https://ii-server-9mzn.onrender.com/click/return";
-
-const gemsPackages = {
-    test_100: {
-        gems: 10,
-        price: 100
-    }
-};
-
-async function CreateClickPayment(ws, data)
+async function CreatePaymentwallPayment(ws)
 {
     try
     {
         if (!ws.username)
             return;
 
-        const packageId = String(data.package || "");
-        const pack = gemsPackages[packageId];
-
-        if (!pack)
+        if (!PAYMENTWALL_PROJECT_KEY)
         {
-            ws.send(JSON.stringify({type: "payment_error", message: "Invalid Gems package."}));
+            ws.send(JSON.stringify({
+                type: "payment_error",
+                message: "Paymentwall Project Key is not configured."
+            }));
+
             return;
         }
-        
-        // =========================
-        // UNIQUE ORDER ID
-        // =========================
 
-        const transactionId = "gem_" + Date.now() + "_" + crypto.randomBytes(4).toString("hex");
-        
-        // SAVE PAYMENT
-        
-        await dbFirebase.ref("payments/" + transactionId).set({
-            username: ws.username.toLowerCase(),
-            package: packageId,
-            gems: pack.gems,
-            amount: pack.price,
-            status: "pending",
-            clickTransId: "",
-            merchantPrepareId: "",
-            createdAt: Date.now()
-        });
+        if (!PAYMENTWALL_SECRET_KEY)
+        {
+            ws.send(JSON.stringify({
+                type: "payment_error",
+                message: "Paymentwall Secret Key is not configured."
+            }));
 
-        // CLICK CHECKOUT URL
+            return;
+        }
 
-        // const returnUrl = CLICK_RETURN_URL || "https://example.com";
-        // const paymentUrl = "https://my.click.uz/services/pay?" +
-        //     "service_id=" +
-        //     encodeURIComponent(
-        //         CLICK_SERVICE_ID
-        //     ) +
-        //     "&merchant_id=" +
-        //     encodeURIComponent(
-        //         CLICK_MERCHANT_ID
-        //     ) +
-        //     "&amount=" +
-        //     encodeURIComponent(
-        //         pack.price
-        //     ) +
-        //     "&transaction_param=" +
-        //     encodeURIComponent(
-        //         transactionId
-        //     ) +
-        //     "&return_url=" +
-        //     encodeURIComponent(
-        //         returnUrl
-        //     );
+        if (!PAYMENTWALL_WIDGET)
+        {
+            ws.send(JSON.stringify({
+                type: "payment_error",
+                message: "Paymentwall Widget is not configured."
+            }));
 
+            return;
+        }
 
-        console.log("CLICK PAYMENT CREATED:", transactionId);
-        console.log("PAYMENT URL:", paymentUrl);
+        const username = ws.username.toLowerCase();
 
-        // SEND TO CLIENT
+        const userRef = dbFirebase.ref("users/" + username);
+
+        const userSnap = await userRef.once("value");
+
+        if (!userSnap.exists())
+        {
+            ws.send(JSON.stringify({
+                type: "payment_error",
+                message: "User not found."
+            }));
+
+            return;
+        }
+
+        const user = userSnap.val();
+
+        const email = String(user.email || "");
+
+        if (!email)
+        {
+            ws.send(JSON.stringify({
+                type: "payment_error",
+                message: "User email is required for payment."
+            }));
+
+            return;
+        }
+
+        const widget =
+            new Paymentwall.Widget(
+                username,
+                PAYMENTWALL_WIDGET,
+                [],
+                {
+                    email: email,
+                    ps: "all"
+                }
+            );
+
+        const paymentUrl = widget.getUrl();
+
+        console.log("PAYMENTWALL PAYMENT CREATED:", username);
+
+        console.log("PAYMENTWALL URL:", paymentUrl);
+
         ws.send(JSON.stringify({
-            type: "click_payment_created",
-            transactionId: transactionId,
-            package: packageId,
-            gems: pack.gems,
-            amount: pack.price,
+            type: "paymentwall_payment_created",
             paymentUrl: paymentUrl
         }));
     }
     catch (error)
     {
-        console.error("CreateClickPayment ERROR:", error);
+        console.error("CreatePaymentwallPayment ERROR:", error);
 
         if (ws.readyState === WebSocket.OPEN)
         {
             ws.send(JSON.stringify({
                 type: "payment_error",
-                message: "Could not create payment."
+                message: "Could not create Paymentwall payment."
             }));
         }
     }
@@ -1617,7 +1296,7 @@ wss.on("connection", ws => {
 
             else if (data.type === "buy_gems")
             {
-                await CreateClickPayment(ws, data);
+                await CreatePaymentwallPayment(ws);
             }
 
             else if (data.type === "claim_daily_challenge")
