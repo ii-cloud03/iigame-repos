@@ -4,6 +4,10 @@ const WebSocket = require("ws");
 
 const http = require("http");
 
+/// payments
+const crypto = require("crypto");
+const querystring = require("querystring");
+
 /////
 const bcrypt = require("bcryptjs"); ////
 
@@ -14,6 +18,106 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({
     server
 });
+
+const CLICK_SERVICE_ID = process.env.CLICK_SERVICE_ID || "110075";
+const CLICK_MERCHANT_ID = process.env.CLICK_MERCHANT_ID || "";
+const CLICK_SECRET_KEY = process.env.CLICK_SECRET_KEY || "";
+const CLICK_RETURN_URL = process.env.CLICK_RETURN_URL || "https://ii-server-9mzn.onrender.com/click/return";
+
+const gemsPackages = {
+    test_100: {
+        gems: 10,
+        price: 100
+    }
+};
+
+async function CreateClickPayment(ws, data)
+{
+    try
+    {
+        if (!ws.username)
+            return;
+
+        const packageId = String(data.package || "");
+        const pack = gemsPackages[packageId];
+
+        if (!pack)
+        {
+            ws.send(JSON.stringify({type: "payment_error", message: "Invalid Gems package."}));
+            return;
+        }
+        
+        // =========================
+        // UNIQUE ORDER ID
+        // =========================
+
+        const transactionId = "gem_" + Date.now() + "_" + crypto.randomBytes(4).toString("hex");
+        
+        // SAVE PAYMENT
+        
+        await dbFirebase.ref("payments/" + transactionId).set({
+            username: ws.username.toLowerCase(),
+            package: packageId,
+            gems: pack.gems,
+            amount: pack.price,
+            status: "pending",
+            clickTransId: "",
+            merchantPrepareId: "",
+            createdAt: Date.now()
+        });
+
+        // CLICK CHECKOUT URL
+
+        const returnUrl = CLICK_RETURN_URL || "https://example.com";
+        const paymentUrl = "https://my.click.uz/services/pay?" +
+            "service_id=" +
+            encodeURIComponent(
+                CLICK_SERVICE_ID
+            ) +
+            "&merchant_id=" +
+            encodeURIComponent(
+                CLICK_MERCHANT_ID
+            ) +
+            "&amount=" +
+            encodeURIComponent(
+                pack.price
+            ) +
+            "&transaction_param=" +
+            encodeURIComponent(
+                transactionId
+            ) +
+            "&return_url=" +
+            encodeURIComponent(
+                returnUrl
+            );
+
+
+        console.log("CLICK PAYMENT CREATED:", transactionId);
+        console.log("PAYMENT URL:", paymentUrl);
+
+        // SEND TO CLIENT
+        ws.send(JSON.stringify({
+            type: "click_payment_created",
+            transactionId: transactionId,
+            package: packageId,
+            gems: pack.gems,
+            amount: pack.price,
+            paymentUrl: paymentUrl
+        }));
+    }
+    catch (error)
+    {
+        console.error("CreateClickPayment ERROR:", error);
+
+        if (ws.readyState === WebSocket.OPEN)
+        {
+            ws.send(JSON.stringify({
+                type: "payment_error",
+                message: "Could not create payment."
+            }));
+        }
+    }
+}
 
 function getToday()
 {
@@ -980,6 +1084,11 @@ wss.on("connection", ws => {
                 broadcastOnlineCount();
 
                 return;
+            }
+
+            else if (data.type === "buy_gems")
+            {
+                await CreateClickPayment(ws, data);
             }
 
             else if (data.type === "claim_daily_challenge")
