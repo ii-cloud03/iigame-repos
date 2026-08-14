@@ -545,7 +545,7 @@ function VerifyClickCompleteSignature(data)
 }
 
 const CLICK_SERVICE_ID = process.env.CLICK_SERVICE_ID || "110075";
-const CLICK_MERCHANT_ID = process.env.CLICK_MERCHANT_ID || "";
+// const CLICK_MERCHANT_ID = process.env.CLICK_MERCHANT_ID || "";
 const CLICK_SECRET_KEY = process.env.CLICK_SECRET_KEY || "";
 const CLICK_RETURN_URL = process.env.CLICK_RETURN_URL || "https://ii-server-9mzn.onrender.com/click/return";
 
@@ -593,28 +593,28 @@ async function CreateClickPayment(ws, data)
 
         // CLICK CHECKOUT URL
 
-        const returnUrl = CLICK_RETURN_URL || "https://example.com";
-        const paymentUrl = "https://my.click.uz/services/pay?" +
-            "service_id=" +
-            encodeURIComponent(
-                CLICK_SERVICE_ID
-            ) +
-            "&merchant_id=" +
-            encodeURIComponent(
-                CLICK_MERCHANT_ID
-            ) +
-            "&amount=" +
-            encodeURIComponent(
-                pack.price
-            ) +
-            "&transaction_param=" +
-            encodeURIComponent(
-                transactionId
-            ) +
-            "&return_url=" +
-            encodeURIComponent(
-                returnUrl
-            );
+        // const returnUrl = CLICK_RETURN_URL || "https://example.com";
+        // const paymentUrl = "https://my.click.uz/services/pay?" +
+        //     "service_id=" +
+        //     encodeURIComponent(
+        //         CLICK_SERVICE_ID
+        //     ) +
+        //     "&merchant_id=" +
+        //     encodeURIComponent(
+        //         CLICK_MERCHANT_ID
+        //     ) +
+        //     "&amount=" +
+        //     encodeURIComponent(
+        //         pack.price
+        //     ) +
+        //     "&transaction_param=" +
+        //     encodeURIComponent(
+        //         transactionId
+        //     ) +
+        //     "&return_url=" +
+        //     encodeURIComponent(
+        //         returnUrl
+        //     );
 
 
         console.log("CLICK PAYMENT CREATED:", transactionId);
