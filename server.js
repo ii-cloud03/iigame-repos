@@ -670,7 +670,235 @@ async function UpdateStats(room, isFriendGame = false)
 }
 ////
 
+
+
+//// Shop
+const SHOP_SKINS = {
+    classic: 0,
+    neon: 500,
+    gold: 1000,
+    fire: 1500,
+    ice: 2000
+};
+
+const SHOP_AVATARS = {
+    default: 0,
+    ball: 100,
+    bottle: 150,
+    boy: 200,
+    hacker: 500,
+    cactus: 300,
+    dragon: 1000,
+    wolf: 700,
+    frz_wolf: 800,
+    cat: 400,
+    cats: 450,
+    pirate: 700,
+    samurai: 900,
+    magic: 1000,
+    viking: 850,
+    face: 300,
+    lightning: 1200,
+    bubble: 400,
+    nature: 500,
+    skeleton_boy: 900,
+    skeleton_gr: 900,
+    snow: 600,
+    spell: 1100,
+    noob: 250,
+    home: 300,
+    friends: 300,
+    skeleton: 1000,
+    meteor: 1300,
+    dog: 500,
+    clown: 700,
+    moon: 1000,
+    panda: 800,
+    tiger: 900
+};
+
+async function SendShopData(ws, username)
+{
+    if (!ws || ws.readyState !== WebSocket.OPEN)
+        return;
+
+    const usernameLower = String(username).toLowerCase();
+    const snap = await dbFirebase.ref("users/" + usernameLower).once("value");
+
+    if (!snap.exists())
+        return;
+
+    const user = snap.val();
+
+    ws.send(JSON.stringify({
+        type: "shop_data",
+        coins: Number(user.coins || 0),
+        ownedSkins: Array.isArray(user.ownedSkins) ? user.ownedSkins: ["default"],
+        ownedAvatars: Array.isArray(user.ownedAvatars) ? user.ownedAvatars : ["default"],
+        equippedSkin: user.equippedSkin || "classic",
+        equippedAvatar: user.equippedAvatar || "default"
+    }));
+}
+
+async function BuyShopItem(ws, data)
+{
+    try
+    {
+        if (!ws.username) {
+            ws.send(JSON.stringify({type: "shop_error", message: "Not logged in."}));
+            return;
+        }
+
+        const category = String(data.category || "");
+        const itemId = String(data.itemId || "");
+        let price = -1;
+        
+        if (category === "skin") {
+            if (!Object.prototype.hasOwnProperty.call(SHOP_SKINS, itemId)) {
+                ws.send(JSON.stringify({type: "shop_error", message: "Skin not found."}));
+                return;
+            }
+
+            price = SHOP_SKINS[itemId];
+        }
+        else if (category === "avatar") {
+            if (!Object.prototype.hasOwnProperty.call(SHOP_AVATARS, itemId))
+            {
+                ws.send(JSON.stringify({type: "shop_error", message: "Avatar not found."}));
+                return;
+            }
+
+            price = SHOP_AVATARS[itemId];
+        }
+        else {
+            ws.send(JSON.stringify({type: "shop_error", message: "Invalid shop category."}));
+            return;
+        }
+
+        const username = ws.username.toLowerCase();
+        const userRef = dbFirebase.ref("users/" + username);
+        const result =
+            await userRef.transaction(user =>
+            {
+                if (!user)
+                    return;
+
+                const ownedSkins = Array.isArray(user.ownedSkins) ? [...user.ownedSkins] : ["classic"];
+                const ownedAvatars = Array.isArray(user.ownedAvatars) ? [...user.ownedAvatars] : ["default"];
+                
+                if (category === "skin")
+                {
+                    if (ownedSkins.includes(itemId))
+                        return user;
+                }
+                else
+                {
+                    if (ownedAvatars.includes(itemId))
+                        return user;
+                }
+
+                const coins = Number(user.coins || 0);
+                
+                if (coins < price) return;
+                
+                user.coins = coins - price;
+                
+                if (category === "skin")
+                {
+                    ownedSkins.push(itemId);
+                    user.ownedSkins = ownedSkins;
+                }
+                else
+                {
+                    ownedAvatars.push(itemId);
+                    user.ownedAvatars = ownedAvatars;
+                }
+
+                return user;
+            });
+
+        if (!result.committed)
+        {
+            ws.send(JSON.stringify({type: "shop_error", message: "Not enough coins or item unavailable."}));
+            return;
+        }
+
+        ws.send(JSON.stringify({
+            type: "shop_purchase_success",
+            category: category,
+            itemId: itemId,
+            price: price
+        }));
+
+        await SendShopData(ws, username);
+        await SendProfile(ws, username);
+    }
+    catch (error)
+    {
+        console.error("BuyShopItem ERROR:", error);
+        ws.send(JSON.stringify({type: "shop_error", message: "Purchase failed."}));
+    }
+}
+
+async function EquipShopItem(ws, data)
+{
+    try
+    {
+        if (!ws.username) {
+            ws.send(JSON.stringify({type: "shop_error", message: "Not logged in."}));
+            return;
+        }
+
+        const category = String(data.category || "");
+        const itemId = String(data.itemId || "");
+        const username = ws.username.toLowerCase();
+        const userRef = dbFirebase.ref("users/" + username);
+        const snap = await userRef.once("value");
+
+        if (!snap.exists())
+            return;
+
+        const user = snap.val();
+
+        if (category === "skin") {
+            const owned = Array.isArray(user.ownedSkins) ? user.ownedSkins : ["classic"];
+            
+            if (!owned.includes(itemId))
+            {
+                ws.send(JSON.stringify({type: "shop_error", message: "Skin is not owned."}));
+                return;
+            }
+
+            await userRef.update({equippedSkin: itemId});
+        }
+        else if (category === "avatar") {
+            const owned = Array.isArray(user.ownedAvatars) ? user.ownedAvatars : ["default"];
+            
+            if (!owned.includes(itemId)) {
+                ws.send(JSON.stringify({type: "shop_error", message: "Avatar is not owned."}));
+                return;
+            }
+
+            await userRef.update({equippedAvatar: itemId, avatar: itemId});
+        }
+        else {
+            ws.send(JSON.stringify({type: "shop_error", message: "Invalid shop category."}));
+            return;
+        }
+
+        ws.send(JSON.stringify({type: "shop_equip_success", category: category, itemId: itemId}));
+
+        await SendShopData(ws, username);
+        await SendProfile(ws, username);
+    }
+    catch (error)
+    {
+        console.error("EquipShopItem ERROR:", error);
+        ws.send(JSON.stringify({type: "shop_error", message: "Equip failed."}));
+    }
+}
 //////
+
 async function SendProfile(ws, username)
 {
     const snap = await dbFirebase.ref("users/" + username.toLowerCase()).once("value");
@@ -689,7 +917,13 @@ async function SendProfile(ws, username)
         vip: user.vip,
 
         last5: user.last5,
-        gems: user.gems || 0
+        gems: user.gems || 0,
+
+        // Shop
+        ownedSkins: user.ownedSkins || ["default"],
+        ownedAvatars: user.ownedAvatars || ["default"],
+        equippedSkin: user.equippedSkin || "default",
+        equippedAvatar: user.equippedAvatar || "default"
     }));
 }
 //////
@@ -771,6 +1005,12 @@ wss.on("connection", ws => {
                     level: 1,
                     vip: false,
 
+                    // Shop
+                    ownedSkins: ["default"],
+                    ownedAvatars: ["default"],
+                    equippedSkin: "default",
+                    equippedAvatar: "default",
+
                     // 
                     dailyChallengeType: challenge.type,
                     dailyChallengeTarget: challenge.target,
@@ -842,6 +1082,11 @@ wss.on("connection", ws => {
                 if (user.theme === undefined) updates.theme = "dark";
                 if (user.language === undefined) updates.language = "English";
                 if (user.sounds === undefined) updates.sounds = true;
+
+                if (user.ownedSkins === undefined) updates.ownedSkins = ["default"];
+                if (user.ownedAvatars === undefined) updates.ownedAvatars = ["default"];
+                if (user.equippedSkin === undefined) updates.equippedSkin = "default";
+                if (user.equippedAvatar === undefined) updates.equippedAvatar = "default";
 
                 // if (user.games === undefined) updates.games = 0; // gamesPlayed 
                 if (user.wins === undefined) updates.wins = 0;
@@ -949,6 +1194,12 @@ wss.on("connection", ws => {
                     wins: user.wins,
                     losses: user.losses,
                     draws: user.draws,
+
+                    // Shop
+                    ownedSkins: user.ownedSkins || ["default"],
+                    ownedAvatars: user.ownedAvatars || ["default"],
+                    equippedSkin: user.equippedSkin || "default",
+                    equippedAvatar: user.equippedAvatar || "default",
             
                     coins: user.coins,
                     gems: user.gems,
@@ -981,9 +1232,21 @@ wss.on("connection", ws => {
                     sounds: user.sounds
                 }));
 
+                await SendShopData(ws, username);
+                
                 broadcastOnlineCount();
 
                 return;
+            }
+
+            else if (data.type === "buy_shop_item")
+            {
+                await BuyShopItem(ws, data);
+            }
+
+            else if (data.type === "equip_shop_item")
+            {
+                await EquipShopItem(ws, data);
             }
 
             else if (data.type === "claim_daily_challenge")
