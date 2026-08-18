@@ -778,10 +778,16 @@ async function BuyShopItem(ws, data)
         const username = ws.username.toLowerCase();
         const userRef = dbFirebase.ref("users/" + username);
 
+        const testSnapshot = await userRef.once("value"); // test
+
+        console.log("SHOP USERNAME:", username);
+        console.log("SHOP USER EXISTS:", testSnapshot.exists());
+        console.log("SHOP USER DATA:", testSnapshot.val());
+        
         console.log("SHOP BUY:");
         console.log("category:", category);
         console.log("itemId:", itemId);
-        console.log("price:", price);
+        console.log("price:", price); // t
         
         const result = await userRef.transaction(user =>
         {
