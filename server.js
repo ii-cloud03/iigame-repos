@@ -810,7 +810,7 @@ async function BuyShopItem(ws, data)
                 user = JSON.parse(JSON.stringify(existingUser));
             }
 
-            console.log("TRANSACTION USER:", user);
+            // console.log("TRANSACTION USER:", user);
 
             const ownedSkins = Array.isArray(user.ownedSkins) ? [...user.ownedSkins] : ["default"];
             const ownedAvatars = Array.isArray(user.ownedAvatars) ? [...user.ownedAvatars] : ["default"];
