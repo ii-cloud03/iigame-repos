@@ -785,29 +785,45 @@ async function BuyShopItem(ws, data)
         
         const result = await userRef.transaction(user =>
         {
-            if (!user)
+            console.log("TRANSACTION USER:", user);
+            if (!user) {
+                console.log("❌ USER IS NULL");
                 return;
+            }
 
             const ownedSkins = Array.isArray(user.ownedSkins) ? [...user.ownedSkins] : ["default"];
             const ownedAvatars = Array.isArray(user.ownedAvatars) ? [...user.ownedAvatars] : ["default"];
-                
+
+            console.log("OWNED SKINS:", ownedSkins);
+            console.log("OWNED AVATARS:", ownedAvatars);
+            
             if (category === "skin")
             {
                 if (ownedSkins.includes(itemId))
+                {
+                    console.log("❌ SKIN ALREADY OWNED:", itemId);
                     return user;
+                }
             }
             else
             {
                 if (ownedAvatars.includes(itemId))
+                {
+                    console.log("❌ AVATAR ALREADY OWNED:", itemId);
                     return user;
+                }
             }
 
             const coins = Number(user.coins || 0);
 
             console.log("USER COINS:", coins);
             console.log("ITEM PRICE:", price);
+            console.log("COINS < PRICE:", coins < price);
             
-            if (coins < price) return;
+            if (coins < price) {
+                console.log("❌ NOT ENOUGH COINS");
+                return;
+            }
                 
             user.coins = coins - price;
                 
@@ -821,6 +837,8 @@ async function BuyShopItem(ws, data)
                 ownedAvatars.push(itemId);
                 user.ownedAvatars = ownedAvatars;
             }
+
+            console.log("✅ BUY SUCCESS, NEW COINS:", user.coins);
             
             return user;
         });
