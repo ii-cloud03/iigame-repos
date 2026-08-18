@@ -789,7 +789,7 @@ async function BuyShopItem(ws, data)
         const existingUser = userSnapshot.val();
 
         console.log("USER EXISTS:", userSnapshot.exists());
-        console.log("EXISTING USER:", existingUser);
+        // console.log("EXISTING USER:", existingUser);
 
         if (!existingUser)
         {
