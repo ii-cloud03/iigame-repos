@@ -749,8 +749,8 @@ async function BuyShopItem(ws, data)
             return;
         }
 
-        const category = String(data.category || "");
-        const itemId = String(data.itemId || "");
+        const category = String(data.category || "").trim().toLowerCase();
+        const itemId = String(data.itemId || "").trim().toLowerCase();
         let price = -1;
         
         if (category === "skin") {
@@ -775,38 +775,81 @@ async function BuyShopItem(ws, data)
             return;
         }
 
+        // =========================
+        // 4. PRICE VALIDATION
+        // =========================
+
+        if (!Number.isFinite(price) || price < 0)
+        {
+            console.error("INVALID SHOP PRICE:", category, itemId, price);
+            ws.send(JSON.stringify({type: "shop_error", message: "Item unavailable."}));
+            return;
+        }
+
+        // 5. USER REF
         const username = String(ws.username || "").trim().toLowerCase();
+        if (!username)
+        {
+            ws.send(JSON.stringify({type: "shop_error",message: "Username not found."}));
+            return;
+        }
+        
         const userRef = dbFirebase.ref("users/" + username);
 
-        console.log("SHOP BUY:");
+        console.log("========== SHOP BUY ==========");
         console.log("username:", username);
         console.log("category:", category);
         console.log("itemId:", itemId);
         console.log("price:", price);
 
+        // 6. READ USER FIRST
+        // Transaction boshlanganda Firebase callback
+        // null berishi mumkin.
+        //
+        // Shuning uchun userni oldindan olib qo'yamiz.
+        //
+        
         // Userni oldindan tekshiramiz
         const userSnapshot = await userRef.once("value");
+
+        if (!userSnapshot.exists())
+        {
+            console.log("❌ USER NOT FOUND:", username);
+            ws.send(JSON.stringify({type: "shop_error", message: "User not found."}));
+            return;
+        }
+        
         const existingUser = userSnapshot.val();
 
         console.log("USER EXISTS:", userSnapshot.exists());
         // console.log("EXISTING USER:", existingUser);
 
-        if (!existingUser)
-        {
-            ws.send(JSON.stringify({
-                type: "shop_error",
-                message: "User not found."
-            }));
-            return;
-        }
+        let transactionResult = "unknown";
+        // 7. TRANSACTION
+        // =========================
         
         const result = await userRef.transaction(user =>
         {
+            /*
+             * Firebase transaction callback birinchi chaqirilganda
+             * user null bo'lishi mumkin.
+             *
+             * Bu Firebase'da user yo'q degani emas.
+             */
+            
             if (!user) {
                 // console.log("❌ USER IS NULL");
                 // return;
 
                 console.log("⚠️ TRANSACTION USER NULL -> using existing user");
+
+                /*
+                 * Deep copy qilamiz.
+                 *
+                 * Sababi transaction callback bir necha marta
+                 * chaqirilishi mumkin.
+                 */
+                
                 user = JSON.parse(JSON.stringify(existingUser));
             }
 
@@ -814,16 +857,19 @@ async function BuyShopItem(ws, data)
 
             const ownedSkins = Array.isArray(user.ownedSkins) ? [...user.ownedSkins] : ["default"];
             const ownedAvatars = Array.isArray(user.ownedAvatars) ? [...user.ownedAvatars] : ["default"];
-
-            console.log("OWNED SKINS:", ownedSkins);
-            console.log("OWNED AVATARS:", ownedAvatars);
             
             if (category === "skin")
             {
                 if (ownedSkins.includes(itemId))
                 {
                     console.log("❌ SKIN ALREADY OWNED:", itemId);
-                    return user;
+                    transactionResult = "already_owned";
+
+                    /*
+                     * Ma'lumotni o'zgartirmaymiz.
+                     * Transaction abort bo'ladi.
+                     */
+                    return; // user
                 }
             }
             else
@@ -831,7 +877,8 @@ async function BuyShopItem(ws, data)
                 if (ownedAvatars.includes(itemId))
                 {
                     console.log("❌ AVATAR ALREADY OWNED:", itemId);
-                    return user;
+                    transactionResult = "already_owned";
+                    return;
                 }
             }
 
@@ -839,9 +886,18 @@ async function BuyShopItem(ws, data)
 
             console.log("USER COINS:", coins);
             console.log("ITEM PRICE:", price);
-            
+
+            if (!Number.isFinite(coins))
+            {
+                console.log("❌ INVALID USER COINS");
+                transactionResult = "invalid_coins";
+                return;
+            }
+
+            // NOT ENOUGH COINS
             if (coins < price) {
                 console.log("❌ NOT ENOUGH COINS");
+                transactionResult = "not_enough_coins";
                 return;
             }
                 
@@ -858,16 +914,35 @@ async function BuyShopItem(ws, data)
                 user.ownedAvatars = ownedAvatars;
             }
 
+            transactionResult = "success";
             console.log("✅ BUY SUCCESS, NEW COINS:", user.coins);
             
             return user;
         });
 
-        console.log("SHOP TRANSACTION RESULT:", result);
+        console.log("SHOP TRANSACTION:", result.committed);
 
         if (!result.committed)
         {
-            ws.send(JSON.stringify({type: "shop_error", message: "Not enough coins or item unavailable."}));
+            if (transactionResult === "already_owned")
+            {
+                ws.send(JSON.stringify({type: "shop_error", message: "You already own this item."}));
+                return;
+            }
+
+            if (transactionResult === "not_enough_coins")
+            {
+                ws.send(JSON.stringify({type: "shop_error", message: "Not enough coins."}));
+                return;
+            }
+
+            if (transactionResult === "invalid_coins")
+            {
+                ws.send(JSON.stringify({type: "shop_error", message: "Invalid coin balance."}));
+                return;
+            }
+
+            ws.send(JSON.stringify({type: "shop_error", message: "Purchase failed."}));
             return;
         }
 
