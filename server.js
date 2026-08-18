@@ -735,7 +735,7 @@ async function SendShopData(ws, username)
         coins: Number(user.coins || 0),
         ownedSkins: Array.isArray(user.ownedSkins) ? user.ownedSkins: ["default"],
         ownedAvatars: Array.isArray(user.ownedAvatars) ? user.ownedAvatars : ["default"],
-        equippedSkin: user.equippedSkin || "classic",
+        equippedSkin: user.equippedSkin || "default",
         equippedAvatar: user.equippedAvatar || "default"
     }));
 }
@@ -777,45 +777,44 @@ async function BuyShopItem(ws, data)
 
         const username = ws.username.toLowerCase();
         const userRef = dbFirebase.ref("users/" + username);
-        const result =
-            await userRef.transaction(user =>
+        const result = await userRef.transaction(user =>
+        {
+            if (!user)
+                return;
+
+            const ownedSkins = Array.isArray(user.ownedSkins) ? [...user.ownedSkins] : ["default"];
+            const ownedAvatars = Array.isArray(user.ownedAvatars) ? [...user.ownedAvatars] : ["default"];
+                
+            if (category === "skin")
             {
-                if (!user)
-                    return;
+                if (ownedSkins.includes(itemId))
+                    return user;
+            }
+            else
+            {
+                if (ownedAvatars.includes(itemId))
+                    return user;
+            }
 
-                const ownedSkins = Array.isArray(user.ownedSkins) ? [...user.ownedSkins] : ["classic"];
-                const ownedAvatars = Array.isArray(user.ownedAvatars) ? [...user.ownedAvatars] : ["default"];
+            const coins = Number(user.coins || 0);
                 
-                if (category === "skin")
-                {
-                    if (ownedSkins.includes(itemId))
-                        return user;
-                }
-                else
-                {
-                    if (ownedAvatars.includes(itemId))
-                        return user;
-                }
-
-                const coins = Number(user.coins || 0);
+            if (coins < price) return;
                 
-                if (coins < price) return;
+            user.coins = coins - price;
                 
-                user.coins = coins - price;
-                
-                if (category === "skin")
-                {
-                    ownedSkins.push(itemId);
-                    user.ownedSkins = ownedSkins;
-                }
-                else
-                {
-                    ownedAvatars.push(itemId);
-                    user.ownedAvatars = ownedAvatars;
-                }
-
-                return user;
-            });
+            if (category === "skin")
+            {
+                ownedSkins.push(itemId);
+                user.ownedSkins = ownedSkins;
+            }
+            else
+            {
+                ownedAvatars.push(itemId);
+                user.ownedAvatars = ownedAvatars;
+            }
+            
+            return user;
+        });
 
         if (!result.committed)
         {
