@@ -777,6 +777,12 @@ async function BuyShopItem(ws, data)
 
         const username = ws.username.toLowerCase();
         const userRef = dbFirebase.ref("users/" + username);
+
+        console.log("SHOP BUY:");
+        console.log("category:", category);
+        console.log("itemId:", itemId);
+        console.log("price:", price);
+        
         const result = await userRef.transaction(user =>
         {
             if (!user)
@@ -797,7 +803,10 @@ async function BuyShopItem(ws, data)
             }
 
             const coins = Number(user.coins || 0);
-                
+
+            console.log("USER COINS:", coins);
+            console.log("ITEM PRICE:", price);
+            
             if (coins < price) return;
                 
             user.coins = coins - price;
@@ -815,6 +824,8 @@ async function BuyShopItem(ws, data)
             
             return user;
         });
+
+        console.log("SHOP TRANSACTION RESULT:", result);
 
         if (!result.committed)
         {
