@@ -759,7 +759,7 @@ async function BuyShopItem(ws, data)
                 return;
             }
 
-            price = SHOP_SKINS[itemId];
+            price = Number(SHOP_SKINS[itemId]);
         }
         else if (category === "avatar") {
             if (!Object.prototype.hasOwnProperty.call(SHOP_AVATARS, itemId))
@@ -768,34 +768,49 @@ async function BuyShopItem(ws, data)
                 return;
             }
 
-            price = SHOP_AVATARS[itemId];
+            price = Number(SHOP_AVATARS[itemId]);
         }
         else {
             ws.send(JSON.stringify({type: "shop_error", message: "Invalid shop category."}));
             return;
         }
 
-        const username = ws.username.toLowerCase();
+        const username = String(ws.username || "").trim().toLowerCase();
         const userRef = dbFirebase.ref("users/" + username);
 
-        const testSnapshot = await userRef.once("value"); // test
-
-        console.log("SHOP USERNAME:", username);
-        console.log("SHOP USER EXISTS:", testSnapshot.exists());
-        console.log("SHOP USER DATA:", testSnapshot.val());
-        
         console.log("SHOP BUY:");
+        console.log("username:", username);
         console.log("category:", category);
         console.log("itemId:", itemId);
-        console.log("price:", price); // t
+        console.log("price:", price);
+
+        // Userni oldindan tekshiramiz
+        const userSnapshot = await userRef.once("value");
+        const existingUser = userSnapshot.val();
+
+        console.log("USER EXISTS:", userSnapshot.exists());
+        console.log("EXISTING USER:", existingUser);
+
+        if (!existingUser)
+        {
+            ws.send(JSON.stringify({
+                type: "shop_error",
+                message: "User not found."
+            }));
+            return;
+        }
         
         const result = await userRef.transaction(user =>
         {
-            console.log("TRANSACTION USER:", user);
             if (!user) {
-                console.log("❌ USER IS NULL");
-                return;
+                // console.log("❌ USER IS NULL");
+                // return;
+
+                console.log("⚠️ TRANSACTION USER NULL -> using existing user");
+                user = JSON.parse(JSON.stringify(existingUser));
             }
+
+            console.log("TRANSACTION USER:", user);
 
             const ownedSkins = Array.isArray(user.ownedSkins) ? [...user.ownedSkins] : ["default"];
             const ownedAvatars = Array.isArray(user.ownedAvatars) ? [...user.ownedAvatars] : ["default"];
@@ -824,7 +839,6 @@ async function BuyShopItem(ws, data)
 
             console.log("USER COINS:", coins);
             console.log("ITEM PRICE:", price);
-            console.log("COINS < PRICE:", coins < price);
             
             if (coins < price) {
                 console.log("❌ NOT ENOUGH COINS");
