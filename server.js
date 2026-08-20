@@ -684,7 +684,7 @@ const SHOP_SKINS = {
     gold: 3000,
     lava: 4000,
     neon: 3000,
-    steel_titan: 3000
+    steel_titan: 4000
 };
 
 const SHOP_AVATARS = {
