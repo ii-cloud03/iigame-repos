@@ -24,52 +24,16 @@ function GenerateDailyChallenge()
 {
     const challenges =
     [
-        {
-            type: "win_games",
-            target: 3,
-            reward: 15
-        },
-
-        {
-            type: "win_games",
-            target: 5,
-            reward: 25
-        },
-
-        {
-            type: "play_games",
-            target: 5,
-            reward: 20
-        },
-
-        {
-            type: "play_games",
-            target: 10,
-            reward: 40
-        },
-
-        {
-            type: "play_friend",
-            target: 5,
-            reward: 25
-        },
-
-        {
-            type: "win_friend",
-            target: 3,
-            reward: 30
-        },
-
-        {
-            type: "draw_games",
-            target: 2,
-            reward: 10
-        }
+        {type: "win_games", target: 3, reward: 15},
+        {type: "win_games", target: 5, reward: 25},
+        {type: "play_games", target: 5, reward: 20},
+        {type: "play_games", target: 10, reward: 40},
+        {type: "play_friend", target: 5, reward: 25},
+        {type: "win_friend", target: 3, reward: 30},
+        {type: "draw_games", target: 2, reward: 10}
     ];
 
-    return challenges[
-        Math.floor(Math.random() * challenges.length)
-    ];
+    return challenges[Math.floor(Math.random() * challenges.length)];
 }
 
 async function UpdateDailyChallengeProgress(username, result, isFriendGame = false)
@@ -350,10 +314,83 @@ dbFirebase.ref("test").set({ message: "Hello Firebase"})
 
 function GenerateCode()
 {
-    return Math.floor(
-        100000 +
-        Math.random() * 900000
-    ).toString();
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+
+    for (let i = 0; i < 6; i++) {
+        code += chars[Math.floor(Math.random() * chars.length)];
+    }
+
+    return code;
+}
+
+function SendRoomList(ws)
+{
+    const roomsList = [];
+
+    for (const roomId in rooms)
+    {
+        if (!Object.prototype.hasOwnProperty.call(rooms, roomId))
+            continue;
+
+        const room = rooms[roomId];
+
+        roomsList.push({
+            id: roomId,
+            name: room.name || "Unnamed Room",
+            host: room.players.length > 0
+                ? room.players[0].username
+                : room.host || "",
+            players: room.players.length,
+            maxPlayers: 2,
+            hasPassword: !!(room.password && room.password.length > 0)
+        });
+    }
+
+    ws.send(JSON.stringify({type: "room_list", rooms: roomsList}));
+}
+
+function BroadcastRoomList()
+{
+    wss.clients.forEach(client =>
+    {
+        if (client.readyState === WebSocket.OPEN)
+        {
+            SendRoomList(client);
+        }
+    });
+}
+
+function RemoveFromRoom(ws)
+{
+    const roomId = ws.roomId;
+    if (!roomId) return;
+
+    const room = rooms[roomId];
+    
+    if (!room) {
+        ws.roomId = null;
+        return;
+    }
+
+    room.players = room.players.filter(p => p.ws !== ws);
+
+    if (room.players.length === 0)
+    {
+        delete rooms[roomId];
+        // console.log("ROOM DELETED:", roomId);
+    }
+    else
+    {
+        const remaining = room.players[0];
+        remaining.ws.send(JSON.stringify({
+            type: "room_player_left",
+            roomId: roomId,
+            username: ws.username
+        }));
+    }
+
+    ws.roomId = null;
 }
 
 const onlineUsers = new Map();
@@ -669,8 +706,6 @@ async function UpdateStats(room, isFriendGame = false)
     }
 }
 ////
-
-
 
 //// Shop
 const SHOP_SKINS = {
@@ -2025,22 +2060,43 @@ wss.on("connection", ws => {
                 ws.send(JSON.stringify({type: "password_reset_success"}));
             }
             
-            else if (data.type === "create") {
-                const roomId = Math.random().toString(36).substring(2, 8);
+            else if (data.type === "create")
+            {
+                if (!ws.username) {
+                    ws.send(JSON.stringify({type: "error", message: "Not logged in"})); 
+                    return;
+                }
+
+                const roomName = String(data.name || "").trim();
+                const password = String(data.password || "");
+                let roomId;
+
+                do {
+                    roomId = GenerateCode();
+                } while (rooms[roomId]);
 
                 rooms[roomId] = createRoom();
-
+                rooms[roomId].name = roomName;
+                rooms[roomId].password = password;
+                
                 rooms[roomId].players.push({ws: ws, username: ws.username, symbol: "X"});
 
                 ws.symbol = "X"; // ad
                 ws.roomId = roomId; // a
                 
-                ws.send(JSON.stringify({type: "created", roomId: roomId, symbol: "X"}));
+                ws.send(JSON.stringify({type: "created", roomId: roomId, symbol: "X", roomName: roomName, hasPassword: password.length > 0}));
 
                 broadcastState(roomId); // add
             }
 
-            else if (data.type === "join") {
+            else if (data.type === "join")
+            {
+                if (!ws.username) {
+                    ws.send(JSON.stringify({type: "error", message: "Not logged in"})); 
+                    return;
+                }
+                
+                const roomId = String(data.roomId || "").trim().toUpperCase();   /// a
                 const room = rooms[data.roomId];
 
                 if (!room) {
@@ -2052,14 +2108,46 @@ wss.on("connection", ws => {
                     return;
                 }
 
+                const password = String(data.password || "");
+
+                // Room passwordli bo'lsa
+                if (room.password && room.password.length > 0)
+                {
+                    // Client hali password yubormagan
+                    if (!Object.prototype.hasOwnProperty.call(data, "password")) {
+                        ws.send(JSON.stringify({type: "room_password_required", roomId: roomId}));
+                        return;
+                    }
+                    
+                    // Password noto'g'ri
+                    if (password !== room.password) {
+                        ws.send(JSON.stringify({type: "error", message: "Incorrect room password"}));
+                        return;
+                    }
+                }
+                
                 room.players.push({ws: ws, username: ws.username, symbol: "O"});
 
                 ws.symbol = "O"; // a
-                ws.roomId = data.roomId; // a
+                ws.roomId = roomId; // a
                 
-                ws.send(JSON.stringify({type: "joined", symbol: "O"}));
+                ws.send(JSON.stringify({type: "joined", symbol: "O", roomId: roomId, roomName: room.name}));
 
-                broadcastState(data.roomId);
+                // Hostga ham yangi player kirganini bildiramiz
+                if (room.players.length === 2)
+                {
+                    const host = room.players[0];
+            
+                    host.ws.send(JSON.stringify({type: "room_ready", roomId: roomId, opponent: ws.username}));
+                    ws.send(JSON.stringify({type: "room_ready", roomId: roomId, opponent: host.username}));
+                }
+                
+                broadcastState(roomId);
+            }
+
+            else if (data.type === "get_rooms")
+            {
+                SendRoomList(ws);
             }
 
             else if (data.type === "leave_match")
@@ -2404,6 +2492,8 @@ wss.on("connection", ws => {
                 }
             }
         }
+        
+        RemoveFromRoom(ws);
         // console.log("Client disconnected");
     });
 });
