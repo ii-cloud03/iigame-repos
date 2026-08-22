@@ -312,6 +312,11 @@ dbFirebase.ref("test").set({ message: "Hello Firebase"})
 .catch(err => console.log("Firebase Error:", err));
 //// firebase ///
 
+function GenerateResetCode()
+{
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 function GenerateCode()
 {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -388,9 +393,21 @@ function RemoveFromRoom(ws)
             roomId: roomId,
             username: ws.username
         }));
+
+        // Host qolgan player bo'ladi
+        room.host = remaining.username;
+
+        remaining.ws.roomId = roomId;
+        remaining.ws.symbol = "X";
+
+        // O'yin endi aktiv emas
+        room.gameActive = false;
+        room.started = false;
     }
 
     ws.roomId = null;
+    ws.symbol = null;
+    BroadcastRoomList();
 }
 
 const onlineUsers = new Map();
@@ -1906,7 +1923,7 @@ wss.on("connection", ws => {
                     return;
                 }
                 
-                const code = GenerateCode();
+                const code = GenerateResetCode();
             
                 await dbFirebase.ref("users/" + userKey).update({
                     resetCode: code, resetExpire: Date.now() + 10 * 60 * 1000
@@ -2067,6 +2084,12 @@ wss.on("connection", ws => {
                     return;
                 }
 
+                // User allaqachon roomda
+                if (ws.roomId) {
+                    ws.send(JSON.stringify({type: "error", message: "You are already in a room."}));
+                    return;
+                }
+                
                 const roomName = String(data.name || "").trim();
                 const password = String(data.password || "");
                 let roomId;
@@ -2078,6 +2101,8 @@ wss.on("connection", ws => {
                 rooms[roomId] = createRoom();
                 rooms[roomId].name = roomName;
                 rooms[roomId].password = password;
+                rooms[roomId].host = ws.username;
+                rooms[roomId].gameActive = false;
                 
                 rooms[roomId].players.push({ws: ws, username: ws.username, symbol: "X"});
 
@@ -2087,12 +2112,19 @@ wss.on("connection", ws => {
                 ws.send(JSON.stringify({type: "created", roomId: roomId, symbol: "X", roomName: roomName, hasPassword: password.length > 0}));
 
                 broadcastState(roomId); // add
+                BroadcastRoomList();
             }
 
             else if (data.type === "join")
             {
                 if (!ws.username) {
                     ws.send(JSON.stringify({type: "error", message: "Not logged in"})); 
+                    return;
+                }
+
+                // User allaqachon roomda
+                if (ws.roomId) {
+                    ws.send(JSON.stringify({type: "error", message: "You are already in a room."}));
                     return;
                 }
                 
@@ -2136,13 +2168,19 @@ wss.on("connection", ws => {
                 // Hostga ham yangi player kirganini bildiramiz
                 if (room.players.length === 2)
                 {
+                    room.gameActive = true;
+                    room.started = true;
+                    
                     const host = room.players[0];
+                    const guest = room.players[1]; // 
             
                     host.ws.send(JSON.stringify({type: "room_ready", roomId: roomId, opponent: ws.username}));
                     ws.send(JSON.stringify({type: "room_ready", roomId: roomId, opponent: host.username}));
+                    // guest.ws.send(JSON.stringify({type: "room_ready", roomId: roomId, opponent: host.username, symbol: "O"}));
                 }
                 
                 broadcastState(roomId);
+                BroadcastRoomList();
             }
 
             else if (data.type === "get_rooms")
