@@ -1975,7 +1975,7 @@ wss.on("connection", ws => {
                 if (foundUser.email.toLowerCase() === data.value.toLowerCase())
                 {
                     /**/
-                    const code = GenerateCode();
+                    const code = GenerateResetCode();
                     await dbFirebase.ref("users/" + userKey).update({
                         resetCode: code, resetExpire: Date.now() + 10 * 60 * 1000
                     });
@@ -2174,9 +2174,14 @@ wss.on("connection", ws => {
                     const host = room.players[0];
                     const guest = room.players[1]; // 
             
-                    host.ws.send(JSON.stringify({type: "room_ready", roomId: roomId, opponent: ws.username}));
-                    ws.send(JSON.stringify({type: "room_ready", roomId: roomId, opponent: host.username}));
+                    host.ws.send(JSON.stringify({type: "match_found", roomId: roomId, symbol: "X", opponent: ws.username})); // type: "room_ready"
+                    ws.send(JSON.stringify({type: "match_found", roomId: roomId, symbol: "O", opponent: host.username})); // type: "room_ready"
                     // guest.ws.send(JSON.stringify({type: "room_ready", roomId: roomId, opponent: host.username, symbol: "O"}));
+
+                     // Xuddi matchmaking kabi
+                    StartRoomTimer(roomId);
+                    // broadcastState(roomId);
+                    broadcastTimer(roomId);
                 }
                 
                 broadcastState(roomId);
@@ -2213,14 +2218,27 @@ wss.on("connection", ws => {
             else if (data.type === "find_match")
             {
                 if (!ws.username) return;
-            
+
+                // User allaqachon roomda bo'lsa,
+                // yana matchmakingga kirmasin
+                if (ws.roomId)
+                {
+                    ws.send(JSON.stringify({type: "error", message: "You are already in a room."}));
+                    return;
+                }
+                
                 matchmakingQueue = matchmakingQueue.filter(p => p.ws !== ws);
             
                 if (matchmakingQueue.length > 0)
                 {
                     const opponent = matchmakingQueue.shift();
-            
-                    const roomId = Math.random().toString(36).substring(2, 8);
+
+                    let roomId;
+                    do
+                    {
+                        roomId = GenerateCode();
+                    }
+                    while (rooms[roomId]);
             
                     rooms[roomId] = createRoom();
             
