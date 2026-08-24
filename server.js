@@ -340,9 +340,20 @@ function SendRoomList(ws)
 
         const room = rooms[roomId];
 
+        if (!room || !Array.isArray(room.players))
+            continue;
+        
+        // To'liq roomni ko'rsatmaymiz
+        if (room.players.length >= 2)
+            continue;
+
+        // O'yin boshlangan roomni ko'rsatmaymiz
+        if (room.gameActive)
+            continue;
+        
         roomsList.push({
             id: roomId,
-            name: room.name || "Unnamed Room",
+            name: room.name || roomId,
             host: room.players.length > 0
                 ? room.players[0].username
                 : room.host || "",
@@ -439,6 +450,7 @@ function createRoom() {
         timerInterval: null,
         lastSecond: -1,
         finishing: false,
+        gameActive: false,
         
         rematchPlayers: []
     };
@@ -2182,10 +2194,13 @@ wss.on("connection", ws => {
                     StartRoomTimer(roomId);
                     // broadcastState(roomId);
                     broadcastTimer(roomId);
+
+                    broadcastState(roomId);
+                    BroadcastRoomList();
                 }
                 
-                broadcastState(roomId);
-                BroadcastRoomList();
+                // broadcastState(roomId);
+                // BroadcastRoomList();
             }
 
             else if (data.type === "get_rooms")
@@ -2196,23 +2211,49 @@ wss.on("connection", ws => {
             else if (data.type === "leave_match")
             {
                 const room = rooms[data.roomId];
-                if (!room) return;
+                if (!room) {
+                    ws.roomId = null;
+                    ws.symbol = null;
+                    ws.send(JSON.stringify({type: "leave_success"}));
+                    return;
+                }
 
                 // StopTurnTimer(room);
                 StopRoomTimer(room);
                 
                 const opponent = room.players.find(p => p.ws !== ws);
+                
+                // Chiqayotgan playerni roomdan olib tashlaymiz
+                room.players = room.players.filter(p => p.ws !== ws);
+                // Chiqayotgan clientni tozalaymiz
+                ws.roomId = null;
+                ws.symbol = null;
             
+                // O'YIN HALI BOSHLANMAGAN
+                if (!room.gameActive)
+                {
+                    // Masalan 1/2 edi va host chiqib ketdi.
+                    // Roomni o'chiramiz.
+                    delete rooms[roomId];
+            
+                    ws.send(JSON.stringify({type: "leave_success"}));
+                    BroadcastRoomList();
+                    return;
+                }
+
+                // O'YIN BOSHLANGAN
                 if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
+                    opponent.ws.roomId = null;
+                    opponent.ws.symbol = null;
                     opponent.ws.send(JSON.stringify({type: "opponent_left"})); // raqibga xabar yuborish
                 }
-            
+
+                // O'yin boshlangan room endi tugaydi
+                delete rooms[roomId];
+                
                 ws.send(JSON.stringify({type: "leave_success"}));
-                room.players = room.players.filter(p => p.ws !== ws);
-            
-                if (room.players.length === 0) {
-                    delete rooms[data.roomId];
-                }
+
+                BroadcastRoomList();
             }
 
             else if (data.type === "find_match")
@@ -2244,7 +2285,9 @@ wss.on("connection", ws => {
             
                     rooms[roomId].players.push({ws: opponent.ws, username: opponent.username, symbol: "X"});
                     rooms[roomId].players.push({ws: ws, username: ws.username, symbol: "O"});
-            
+                    rooms[roomId].gameActive = true;
+                    rooms[roomId].started = true;
+                    
                     opponent.ws.roomId = roomId;
                     opponent.ws.symbol = "X";
             
@@ -2269,6 +2312,8 @@ wss.on("connection", ws => {
                     broadcastState(roomId);  // ch order
                     broadcastTimer(roomId);
                     // StartTurnTimer(roomId);
+
+                    BroadcastRoomList();
                 }
                 else {
                     matchmakingQueue.push({ws: ws, username: ws.username});
