@@ -2229,7 +2229,7 @@ wss.on("connection", ws => {
                 {
                     // Masalan 1/2 edi va host chiqib ketdi.
                     // Roomni o'chiramiz.
-                    delete rooms[roomId];
+                    delete rooms[data.roomId];
             
                     ws.send(JSON.stringify({type: "leave_success"}));
                     BroadcastRoomList();
@@ -2244,7 +2244,7 @@ wss.on("connection", ws => {
                 }
 
                 // O'yin boshlangan room endi tugaydi
-                delete rooms[roomId];
+                delete rooms[data.roomId];
                 
                 ws.send(JSON.stringify({type: "leave_success"}));
 
