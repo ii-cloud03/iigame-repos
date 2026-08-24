@@ -413,7 +413,6 @@ function RemoveFromRoom(ws)
 
         // O'yin endi aktiv emas
         room.gameActive = false;
-        room.started = false;
     }
 
     ws.roomId = null;
@@ -2181,7 +2180,6 @@ wss.on("connection", ws => {
                 if (room.players.length === 2)
                 {
                     room.gameActive = true;
-                    room.started = true;
                     
                     const host = room.players[0];
                     const guest = room.players[1]; // 
