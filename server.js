@@ -2205,7 +2205,8 @@ wss.on("connection", ws => {
 
             else if (data.type === "leave_match")
             {
-                const room = rooms[data.roomId];
+                const roomId = String(data.roomId || "");
+                const room = rooms[roomId];
                 if (!room) {
                     ws.roomId = null;
                     ws.symbol = null;
@@ -2229,7 +2230,7 @@ wss.on("connection", ws => {
                 {
                     // Masalan 1/2 edi va host chiqib ketdi.
                     // Roomni o'chiramiz.
-                    delete rooms[data.roomId];
+                    delete rooms[roomId];
             
                     ws.send(JSON.stringify({type: "leave_success"}));
                     BroadcastRoomList();
@@ -2244,7 +2245,7 @@ wss.on("connection", ws => {
                 }
 
                 // O'yin boshlangan room endi tugaydi
-                delete rooms[data.roomId];
+                delete rooms[roomId];
                 
                 ws.send(JSON.stringify({type: "leave_success"}));
 
@@ -2281,7 +2282,6 @@ wss.on("connection", ws => {
                     rooms[roomId].players.push({ws: opponent.ws, username: opponent.username, symbol: "X"});
                     rooms[roomId].players.push({ws: ws, username: ws.username, symbol: "O"});
                     rooms[roomId].gameActive = true;
-                    rooms[roomId].started = true;
                     
                     opponent.ws.roomId = roomId;
                     opponent.ws.symbol = "X";
