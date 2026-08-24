@@ -2192,13 +2192,10 @@ wss.on("connection", ws => {
                     StartRoomTimer(roomId);
                     // broadcastState(roomId);
                     broadcastTimer(roomId);
-
-                    broadcastState(roomId);
-                    BroadcastRoomList();
                 }
                 
-                // broadcastState(roomId);
-                // BroadcastRoomList();
+                broadcastState(roomId);
+                BroadcastRoomList();
             }
 
             else if (data.type === "get_rooms")
