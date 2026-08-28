@@ -427,18 +427,23 @@ function IsValidUsername(username)
     return /^[A-Za-z0-9_]{3,16}$/.test(username);
 }
 
-function createBoard()
+function createBoard(size)
 {
-    return [
-        "", "", "",
-        "", "", "",
-        "", "", ""
-    ];
+    // return [
+    //     "", "", "",
+    //     "", "", "",
+    //     "", "", ""
+    // ];
+    return Array(size * size).fill("");
 }
 
-function createRoom() {
+function createRoom(boardSize = 3, winLength = 3) {
     return {
-        board: createBoard(),
+        board: createBoard(boardSize),
+
+        boardSize: boardSize,
+        winLength: winLength,
+        
         turn: "X",
         winner: "",
         winnerCells: [],
@@ -574,6 +579,8 @@ function broadcastState(roomId) { // broadcast
         turn: room.turn,
         winner: room.winner,
         winnerCells: room.winnerCells,
+        boardSize: room.boardSize,
+        winLength: room.winLength
     });
 
     room.players.forEach(p => {
@@ -602,47 +609,104 @@ function broadcastTimer(roomId) {
 function checkWinner(room) {
     if (room.finishing) return;  //***///
     
-    const b = room.board;
+    // const b = room.board;
+
+    // nw, nxn
+    const board = room.board;
+    const size = room.boardSize;
+    const winLength = room.winLength;
     
-    const wins = [
-        [0,1,2],
-        [3,4,5],
-        [6,7,8],
+    // const wins = [
+    //     [0,1,2],
+    //     [3,4,5],
+    //     [6,7,8],
 
-        [0,3,6],
-        [1,4,7],
-        [2,5,8],
+    //     [0,3,6],
+    //     [1,4,7],
+    //     [2,5,8],
 
-        [0,4,8],
-        [2,4,6]
-    ];
+    //     [0,4,8],
+    //     [2,4,6]
+    // ];
 
     // ad
     room.winner = ""; //
     room.winnerCells = []; // 
+
+    // nw, nxn
+    const directions = [
+        [0, 1],   // horizontal
+        [1, 0],   // vertical
+        [1, 1],   // diagonal \
+        [1, -1]   // diagonal /
+    ];
     
-    for (let w of wins) {
-        const a = w[0];
-        const b1 = w[1];
-        const c = w[2];
+    // for (let w of wins) {
+    //     const a = w[0];
+    //     const b1 = w[1];
+    //     const c = w[2];
 
-        if (b[a] !== "" && b[a] === b[b1] && b[a] === b[c]) {
-            room.winner = b[a];
-            room.winnerCells = w;
-            return;
+    //     if (b[a] !== "" && b[a] === b[b1] && b[a] === b[c]) {
+    //         room.winner = b[a];
+    //         room.winnerCells = w;
+    //         return;
+    //     }
+    // }
+
+    // nw, nxn
+    for (let row = 0; row < size; row++)
+    {
+        for (let col = 0; col < size; col++)
+        {
+            const startIndex = row * size + col;
+            const symbol = board[startIndex];
+
+            if (symbol === "")
+                continue;
+
+            for (const [dr, dc] of directions)
+            {
+                const cells = [];
+
+                for (let k = 0; k < winLength; k++)
+                {
+                    const r = row + dr * k;
+                    const c = col + dc * k;
+
+                    if (r < 0 || r >= size || c < 0 || c >= size) {
+                        break;
+                    }
+
+                    const index = r * size + c;
+
+                    if (board[index] !== symbol) {
+                        break;
+                    }
+
+                    cells.push(index);
+                }
+
+                if (cells.length === winLength) {
+                    room.winner = symbol;
+                    room.winnerCells = cells;
+                    return;
+                }
+            }
         }
     }
+    
+    // let draw = true;
+    // for (let c of room.board) {
+    //     if (c === "") {
+    //         draw = false;
+    //         break;
+    //     }
+    // }
 
-    let draw = true;
-
-    for (let c of room.board) {
-        if (c === "") {
-            draw = false;
-            break;
-        }
-    }
-
-    if (draw && room.winner === "") {
+     // DRAW
+    const draw = board.every(cell => cell !== "");
+    
+    if (draw && room.winner === "") { // if (draw) in new v
         room.winner = "DRAW";
         room.winnerCells = [];
     }
@@ -2109,7 +2173,20 @@ wss.on("connection", ws => {
                     roomId = GenerateCode();
                 } while (rooms[roomId]);
 
-                rooms[roomId] = createRoom();
+                let boardSize = 3;
+                let winLength = 3;
+                
+                if (data.mode === "4x4") {
+                    boardSize = 4;
+                    winLength = 3;
+                }
+                else if (data.mode === "5x5") {
+                    boardSize = 5;
+                    winLength = 4;
+                }
+                
+                rooms[roomId] = createRoom(boardSize, winLength);
+                // rooms[roomId] = createRoom();
                 rooms[roomId].name = roomName;
                 rooms[roomId].password = password;
                 rooms[roomId].host = ws.username;
@@ -2120,7 +2197,16 @@ wss.on("connection", ws => {
                 ws.symbol = "X"; // ad
                 ws.roomId = roomId; // a
                 
-                ws.send(JSON.stringify({type: "created", roomId: roomId, symbol: "X", roomName: roomName, hasPassword: password.length > 0}));
+                ws.send(JSON.stringify({
+                    type: "created",
+                    roomId: roomId,
+                    symbol: "X",
+                    roomName: roomName,
+                    hasPassword: password.length > 0,
+                    mode: data.mode || "classic",
+                    boardSize: boardSize,
+                    winLength: winLength
+                }));
 
                 broadcastState(roomId); // add
                 BroadcastRoomList();
@@ -2140,7 +2226,7 @@ wss.on("connection", ws => {
                 }
                 
                 const roomId = String(data.roomId || "").trim().toUpperCase();   /// a
-                const room = rooms[data.roomId];
+                const room = rooms[roomId];
 
                 if (!room) {
                     ws.send(JSON.stringify({type: "error", message: "Room not found"}));
@@ -2174,7 +2260,14 @@ wss.on("connection", ws => {
                 ws.symbol = "O"; // a
                 ws.roomId = roomId; // a
                 
-                ws.send(JSON.stringify({type: "joined", symbol: "O", roomId: roomId, roomName: room.name}));
+                ws.send(JSON.stringify({
+                    type: "joined",
+                    symbol: "O",
+                    roomId: roomId,
+                    roomName: room.name,
+                    boardSize: room.boardSize,
+                    winLength: room.winLength
+                }));
 
                 // Hostga ham yangi player kirganini bildiramiz
                 if (room.players.length === 2)
@@ -2263,57 +2356,142 @@ wss.on("connection", ws => {
                     ws.send(JSON.stringify({type: "error", message: "You are already in a room."}));
                     return;
                 }
-                
-                matchmakingQueue = matchmakingQueue.filter(p => p.ws !== ws);
-            
-                if (matchmakingQueue.length > 0)
-                {
-                    const opponent = matchmakingQueue.shift();
 
+                // GAME MODE
+                const mode = data.mode || "classic";
+            
+                let boardSize = 3;
+                let winLength = 3;
+            
+                if (mode === "4x4") {
+                    boardSize = 4;
+                    winLength = 3;
+                }
+                else if (mode === "5x5") {
+                    boardSize = 5;
+                    winLength = 4;
+                }
+
+                // USERNI QUEUE'DAN O'CHIRAMIZ
+                matchmakingQueue = matchmakingQueue.filter(p => p.ws !== ws);
+
+                // FAQAT SHU MODE'DAGI OPPONENTNI QIDIRAMIZ
+                const opponentIndex = matchmakingQueue.findIndex(p => p.mode === mode);
+
+                // OPPONENT TOPILDI
+                if (opponentIndex !== -1)
+                {
+                    const opponent = matchmakingQueue.splice(opponentIndex, 1)[0];
                     let roomId;
                     do
                     {
                         roomId = GenerateCode();
                     }
                     while (rooms[roomId]);
-            
-                    rooms[roomId] = createRoom();
-            
-                    rooms[roomId].players.push({ws: opponent.ws, username: opponent.username, symbol: "X"});
-                    rooms[roomId].players.push({ws: ws, username: ws.username, symbol: "O"});
+
+                    rooms[roomId] = createRoom(boardSize, winLength);
+                    rooms[roomId].mode = mode;
                     rooms[roomId].gameActive = true;
                     
+                    // Players
+                    rooms[roomId].players.push({ws: opponent.ws, username: opponent.username, symbol: "X"});
+                    rooms[roomId].players.push({ws: ws, username: ws.username, symbol: "O"});
+
+                    // SOCKET STATE
                     opponent.ws.roomId = roomId;
                     opponent.ws.symbol = "X";
             
                     ws.roomId = roomId;
                     ws.symbol = "O";
-            
+
+                    // MATCH FOUND → PLAYER X
                     opponent.ws.send(JSON.stringify({
                         type: "match_found",
                         roomId: roomId,
                         symbol: "X",
-                        opponent: ws.username
+                        opponent: ws.username,
+
+                        mode: mode,
+                        boardSize: boardSize,
+                        winLength: winLength
                     }));
-            
+                    
+                    // MATCH FOUND → PLAYER O
                     ws.send(JSON.stringify({
                         type: "match_found",
                         roomId: roomId,
                         symbol: "O",
-                        opponent: opponent.username
+                        opponent: opponent.username,
+
+                        mode: mode,
+                        boardSize: boardSize,
+                        winLength: winLength
                     }));
 
+                    // START GAME
                     StartRoomTimer(roomId); // ch order
                     broadcastState(roomId);  // ch order
                     broadcastTimer(roomId);
-                    // StartTurnTimer(roomId);
-
                     BroadcastRoomList();
                 }
                 else {
-                    matchmakingQueue.push({ws: ws, username: ws.username});
-                    ws.send(JSON.stringify({type: "matchmaking"}));
+                    matchmakingQueue.push({ws: ws, username: ws.username, mode: mode});
+                    ws.send(JSON.stringify({
+                        type: "matchmaking",
+                        mode: mode,
+                        boardSize: boardSize,
+                        winLength: winLength
+                    }));
                 }
+                
+                // if (matchmakingQueue.length > 0)
+                // {
+                //     const opponent = matchmakingQueue.shift();
+
+                //     let roomId;
+                //     do
+                //     {
+                //         roomId = GenerateCode();
+                //     }
+                //     while (rooms[roomId]);
+            
+                //     rooms[roomId] = createRoom();
+            
+                //     rooms[roomId].players.push({ws: opponent.ws, username: opponent.username, symbol: "X"});
+                //     rooms[roomId].players.push({ws: ws, username: ws.username, symbol: "O"});
+                //     rooms[roomId].gameActive = true;
+                    
+                //     opponent.ws.roomId = roomId;
+                //     opponent.ws.symbol = "X";
+            
+                //     ws.roomId = roomId;
+                //     ws.symbol = "O";
+            
+                //     opponent.ws.send(JSON.stringify({
+                //         type: "match_found",
+                //         roomId: roomId,
+                //         symbol: "X",
+                //         opponent: ws.username
+                //     }));
+            
+                //     ws.send(JSON.stringify({
+                //         type: "match_found",
+                //         roomId: roomId,
+                //         symbol: "O",
+                //         opponent: opponent.username
+                //     }));
+
+                //     StartRoomTimer(roomId); // ch order
+                //     broadcastState(roomId);  // ch order
+                //     broadcastTimer(roomId);
+                //     // StartTurnTimer(roomId);
+
+                //     BroadcastRoomList();
+                // }
+                // else {
+                //     matchmakingQueue.push({ws: ws, username: ws.username});
+                //     ws.send(JSON.stringify({type: "matchmaking"}));
+                // }
             }
 
             else if (data.type === "cancel_matchmaking")
@@ -2486,7 +2664,7 @@ wss.on("connection", ws => {
                 // Ikkalasi ham bosgan
                 if (room.rematchPlayers.length >= 2)
                 {
-                    room.board = createBoard();
+                    room.board = createBoard(room.boardSize);
                     room.turn = "X";
                     room.winner = "";
 
