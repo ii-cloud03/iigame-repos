@@ -449,7 +449,7 @@ function createRoom(boardSize = 3, winLength = 3) {
         winnerCells: [],
         players: [],
 
-        turnDuration: 30,
+        turnDuration: 300, // 30
         turnStartedAt: 0,
         timerInterval: null,
         lastSecond: -1,
