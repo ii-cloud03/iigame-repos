@@ -359,7 +359,8 @@ function SendRoomList(ws)
                 : room.host || "",
             players: room.players.length,
             maxPlayers: 2,
-            hasPassword: !!(room.password && room.password.length > 0)
+            hasPassword: !!(room.password && room.password.length > 0),
+            mode: room.mode || "classic"
         });
     }
 
