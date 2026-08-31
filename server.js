@@ -2629,8 +2629,15 @@ wss.on("connection", ws => {
                     ws.send(JSON.stringify({type: "error", message: "Player not found"}));
                     return;
                 }
-
-                // Eski socketni yopamiz
+                /**/  // ad gm
+                // TAYMERNI TO'XTATISH (O'yinchi ulgurib keldi!)
+                if (player.disconnectTimer) {
+                    clearTimeout(player.disconnectTimer);
+                    player.disconnectTimer = null;
+                }
+                /**/
+                
+                // Eski socketni yopamiz, // Yangi socketni ulab qo'yish
                 if (player.ws && player.ws !== ws) {
                     try {
                         player.ws.close();
@@ -2763,14 +2770,28 @@ wss.on("connection", ws => {
             const room = rooms[ws.roomId];
     
             if (room) {
+                const player = room.players.find(p => p.username === ws.username);  // ad gm
                 const opponent = room.players.find(p => p.ws !== ws);
                 if (opponent && opponent.ws.readyState === WebSocket.OPEN) {
                     opponent.ws.send(JSON.stringify({type: "opponent_disconnected"}));
                 }
+
+                if (player) {
+                    player.disconnectTimer = setTimeout(() => {
+                        // Agar 30 soniyadan keyin shu taymer ishlasa, demak o'yinchi qaytmadi.
+                        // Endi haqiqatdan ham xonadan o'chirib tashlaymiz:
+                        if (rooms[ws.roomId]) { 
+                            RemoveFromRoom(ws); // Sizning zo'r funksiyangiz shu yerda ishlaydi
+                        }
+                    }, 30000); // 30 soniya kutish
+                }
             }
         }
-        
-        RemoveFromRoom(ws);
+        else { // gm
+            // Agar o'yinda bo'lmasa, darhol o'chirib yuboramiz (masalan, lobby'da turganda)
+            RemoveFromRoom(ws); // 
+        }
+        // RemoveFromRoom(ws);
         // console.log("Client disconnected");
     });
 });
