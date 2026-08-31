@@ -2294,6 +2294,42 @@ wss.on("connection", ws => {
                 BroadcastRoomList();
             }
 
+            else if (data.type === "cancel_room") {
+                if (!ws.username) {
+                    ws.send(JSON.stringify({type: "error", message: "Not logged in"})); 
+                    return;
+                }
+
+                const roomId = String(data.roomId || "").trim().toUpperCase();   /// a
+                const room = rooms[roomId];
+
+                if (!room) {
+                    ws.send(JSON.stringify({type: "error", message: "Room not found"}));
+                    return;
+                }
+
+                // Faqat room hosti cancel qila oladi
+                if (String(room.host).toLowerCase() !== String(ws.username).toLowerCase()) {
+                    ws.send(JSON.stringify({type: "error", message: "You are not the room host."}));
+                    return;
+                }
+            
+                // O'yin boshlangan bo'lsa cancel qilib bo'lmaydi
+                if (room.gameActive) {
+                    ws.send(JSON.stringify({type: "error", message: "The game has already started."}));
+                    return;
+                }
+            
+                // Hostning roomId/symbolini tozalaymiz
+                ws.roomId = null;
+                ws.symbol = null;
+            
+                delete rooms[roomId];
+            
+                ws.send(JSON.stringify({ type: "room_cancelled", roomId: roomId}));
+                BroadcastRoomList();
+            }
+
             else if (data.type === "get_rooms")
             {
                 SendRoomList(ws);
