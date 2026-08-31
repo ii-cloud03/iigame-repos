@@ -444,6 +444,7 @@ function createRoom(boardSize = 3, winLength = 3) {
 
         boardSize: boardSize,
         winLength: winLength,
+        mode: "classic",
         
         turn: "X",
         winner: "",
@@ -2189,6 +2190,7 @@ wss.on("connection", ws => {
                 rooms[roomId] = createRoom(boardSize, winLength);
                 // rooms[roomId] = createRoom();
                 rooms[roomId].name = roomName;
+                rooms[roomId].mode = data.mode || "classic"; /// 
                 rooms[roomId].password = password;
                 rooms[roomId].host = ws.username;
                 rooms[roomId].gameActive = false;
