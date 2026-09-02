@@ -388,6 +388,109 @@ app.post("/telegram/webhook",
     }
 );
 
+async function HandleTelegramMessage(message)
+{
+    try
+    {
+        if (!message || !message.from)
+            return;
+
+        const chatId = message.chat
+            ? message.chat.id
+            : message.from.id;
+
+        const telegramUserId = message.from.id;
+
+        const username =
+            message.from.username || "";
+
+        const text =
+            String(message.text || "").trim();
+
+        console.log(
+            "TELEGRAM MESSAGE:",
+            {
+                telegramUserId,
+                chatId,
+                username,
+                text
+            }
+        );
+
+        /*
+         * /start
+         */
+        if (text === "/start")
+        {
+            await TelegramApi(
+                "sendMessage",
+                {
+                    chat_id: chatId,
+                    text:
+                        "Salom! 👋\n\n" +
+                        "TicTacToe payment botiga xush kelibsiz.\n\n" +
+                        "Accountni ulash uchun o'yin sizga bergan " +
+                        "kodni /start CODE ko'rinishida yuboring."
+                }
+            );
+
+            return;
+        }
+
+        /*
+         * /start CODE
+         */
+        if (text.startsWith("/start "))
+        {
+            const code =
+                text.substring(7).trim();
+
+            if (!code)
+                return;
+
+            console.log(
+                "TELEGRAM LINK CODE:",
+                code
+            );
+
+            await TelegramApi(
+                "sendMessage",
+                {
+                    chat_id: chatId,
+                    text:
+                        "🔗 Linking code qabul qilindi:\n\n" +
+                        code +
+                        "\n\n" +
+                        "Hozircha linking server qismini ham qo'shamiz."
+                }
+            );
+
+            return;
+        }
+
+        /*
+         * Oddiy xabar
+         */
+        await TelegramApi(
+            "sendMessage",
+            {
+                chat_id: chatId,
+                text:
+                    "Buyruqni tushunmadim.\n\n" +
+                    "Account ulash uchun:\n" +
+                    "/start"
+            }
+        );
+    }
+    catch (error)
+    {
+        console.error(
+            "HANDLE TELEGRAM MESSAGE ERROR:",
+            error
+        );
+    }
+}
+
 async function HandleTelegramUpdate(update)
 {
     if (!update)
