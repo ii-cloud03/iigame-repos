@@ -6,6 +6,7 @@ const crypto = require("crypto");
 /////
 const bcrypt = require("bcryptjs"); ////
 const app = express();
+app.use(express.json()); /// 
 const server = http.createServer(app);
 
 const wss = new WebSocket.Server({
