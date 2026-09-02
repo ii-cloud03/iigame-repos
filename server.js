@@ -313,6 +313,18 @@ const TELEGRAM_BOT_TOKEN = process.env.TB_TOKEN || "";
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
 const TELEGRAM_API = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN;
 
+function GenerateTelegramLinkCode()
+{
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    
+    for (let i = 0; i < 10; i++) {
+        code += chars[Math.floor(Math.random() * chars.length)];
+    }
+
+    return code;
+}
+
 async function TelegramApi(method, params = {})
 {
     if (!TELEGRAM_BOT_TOKEN)
@@ -400,26 +412,19 @@ async function HandleTelegramMessage(message)
             : message.from.id;
 
         const telegramUserId = message.from.id;
+        const username = message.from.username || "";
+        const text = String(message.text || "").trim();
 
-        const username =
-            message.from.username || "";
+        // console.log(
+        //     "TELEGRAM MESSAGE:",
+        //     {
+        //         telegramUserId,
+        //         chatId,
+        //         text
+        //     }
+        // );
 
-        const text =
-            String(message.text || "").trim();
-
-        console.log(
-            "TELEGRAM MESSAGE:",
-            {
-                telegramUserId,
-                chatId,
-                username,
-                text
-            }
-        );
-
-        /*
-         * /start
-         */
+        //start
         if (text === "/start")
         {
             await TelegramApi(
@@ -429,42 +434,171 @@ async function HandleTelegramMessage(message)
                     text:
                         "Salom! 👋\n\n" +
                         "TicTacToe payment botiga xush kelibsiz.\n\n" +
-                        "Accountni ulash uchun o'yin sizga bergan " +
-                        "kodni /start CODE ko'rinishida yuboring."
+                        "Game'dan Telegram ulash kodini oling."
                 }
             );
 
             return;
         }
 
-        /*
-         * /start CODE
-         */
+        // start CODE
         if (text.startsWith("/start "))
         {
-            const code =
-                text.substring(7).trim();
+            const code = text.substring(7).trim();
+            if (!code) return;
 
-            if (!code)
+            // await TelegramApi(
+            //     "sendMessage",
+            //     {
+            //         chat_id: chatId,
+            //         text:
+            //             "🔗 Linking code qabul qilindi:\n\n" +
+            //             code +
+            //             "\n\n" +
+            //             "Hozircha linking server qismini ham qo'shamiz."
+            //     }
+            // );
+
+            const codeRef = dbFirebase.ref("telegramLinkCodes/" + code);
+            const snap = await codeRef.once("value");
+            if (!snap.exists())
+            {
+                await TelegramApi(
+                    "sendMessage",
+                    {
+                        chat_id: chatId,
+                        text:
+                            "❌ Link code noto‘g‘ri yoki eskirgan."
+                    }
+                );
                 return;
+            }
 
-            console.log(
-                "TELEGRAM LINK CODE:",
-                code
-            );
+            const linkData = snap.val();
+
+            /*
+             * EXPIRATION
+             */
+            if (!linkData.expiresAt || Date.now() > Number(linkData.expiresAt))
+            {
+                await codeRef.remove();
+
+                await TelegramApi(
+                    "sendMessage",
+                    {
+                        chat_id: chatId,
+                        text:
+                            "❌ Link code muddati tugagan.\n" +
+                            "Game'dan yangi kod oling."
+                    }
+                );
+
+                return;
+            }
+
+            const username =
+                String(linkData.username || "")
+                    .trim()
+                    .toLowerCase();
+
+            if (!username)
+            {
+                await codeRef.remove();
+
+                await TelegramApi(
+                    "sendMessage",
+                    {
+                        chat_id: chatId,
+                        text:
+                            "❌ Invalid link code."
+                    }
+                );
+
+                return;
+            }
+
+            /*
+             * USER EXISTS
+             */
+            const userRef =
+                dbFirebase.ref(
+                    "users/" + username
+                );
+
+            const userSnap = await userRef.once("value");
+
+            if (!userSnap.exists())
+            {
+                await codeRef.remove();
+
+                await TelegramApi(
+                    "sendMessage",
+                    {
+                        chat_id: chatId,
+                        text:
+                            "❌ Game account topilmadi."
+                    }
+                );
+
+                return;
+            }
+
+            /*
+             * TELEGRAM ACCOUNTNI SAQLASH
+             */
+            await userRef.update({
+                telegram: {
+                    userId: String(telegramUserId),
+                    chatId: String(chatId),
+                    username:
+                        message.from.username || "",
+                    linkedAt: Date.now()
+                }
+            });
+
+            /*
+             * CODENI BIR MARTALIK QILAMIZ
+             */
+            await codeRef.remove();
 
             await TelegramApi(
                 "sendMessage",
                 {
                     chat_id: chatId,
                     text:
-                        "🔗 Linking code qabul qilindi:\n\n" +
-                        code +
+                        "✅ Account successfully linked!\n\n" +
+                        "Game account: @" +
+                        username +
                         "\n\n" +
-                        "Hozircha linking server qismini ham qo'shamiz."
+                        "Endi Telegram Stars orqali Gems sotib olishingiz mumkin."
                 }
             );
 
+            console.log(
+                "✅ TELEGRAM ACCOUNT LINKED:",
+                username,
+                telegramUserId
+            );
+
+            /*
+             * USER ONLINE BO'LSA GAMEGA HAM XABAR
+             */
+            const gameWs =
+                onlineUsers.get(username);
+
+            if (
+                gameWs &&
+                gameWs.readyState === WebSocket.OPEN
+            )
+            {
+                gameWs.send(
+                    JSON.stringify({
+                        type:
+                            "telegram_link_success"
+                    })
+                );
+            }
+            
             return;
         }
 
@@ -476,9 +610,7 @@ async function HandleTelegramMessage(message)
             {
                 chat_id: chatId,
                 text:
-                    "Buyruqni tushunmadim.\n\n" +
-                    "Account ulash uchun:\n" +
-                    "/start"
+                    "/start to connect account"
             }
         );
     }
@@ -2065,6 +2197,40 @@ wss.on("connection", ws => {
                 broadcastOnlineCount();
 
                 return;
+            }
+
+            else if (data.type === "telegram_link")
+            {
+                if (!ws.username)
+                {
+                    ws.send(JSON.stringify({type: "telegram_link_error", message: "Not logged in."}));
+                    return;
+                }
+            
+                try
+                {
+                    const username = String(ws.username).trim().toLowerCase();
+                    const code = GenerateTelegramLinkCode();
+                    const now = Date.now();
+                    const expiresAt = now + 10 * 60 * 1000;
+                    await dbFirebase
+                        .ref("telegramLinkCodes/" + code)
+                        .set({username: username, createdAt: now, expiresAt: expiresAt});
+            
+                    const botUsername = process.env.TELEGRAM_BOT_USERNAME;
+                    const link = "https://t.me/" + botUsername + "?start=" + code;
+                    ws.send(JSON.stringify({
+                        type: "telegram_link_created",
+                        code: code,
+                        link: link,
+                        expiresAt: expiresAt
+                    }));
+                }
+                catch (error)
+                {
+                    console.error("TELEGRAM LINK ERROR:", error);
+                    ws.send(JSON.stringify({type: "telegram_link_error", message: "Could not create Telegram link."}));
+                }
             }
 
             else if (data.type === "buy_shop_item")
