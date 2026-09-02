@@ -2636,7 +2636,7 @@ wss.on("connection", ws => {
                     StartRoomTimer(roomId); // ch order
                     // broadcastState(roomId);  // ch order
 
-                    if (room.mode === "ultimate") broadcastUltimateState(roomId);
+                    if (mode === "ultimate") broadcastUltimateState(roomId);
                     else broadcastState(roomId);
                     
                     broadcastTimer(roomId);
