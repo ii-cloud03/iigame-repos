@@ -462,6 +462,47 @@ function createRoom(boardSize = 3, winLength = 3) {
     };
 }
 
+function createUltimateRoom()
+{
+    return {
+        // Oddiy board Ultimate'da ishlatilmaydi
+        board: null,
+
+        boardSize: 3,
+        winLength: 3,
+        mode: "ultimate",
+
+        turn: "X",
+        winner: "",
+        winnerCells: [],
+        players: [],
+
+        turnDuration: 300,
+        turnStartedAt: 0,
+        timerInterval: null,
+        lastSecond: -1,
+        finishing: false,
+        gameActive: false,
+
+        rematchPlayers: [],
+
+        // ULTIMATE STATE
+        // 9 ta ichki 3×3 board
+        ultimateBoards: Array.from(
+            { length: 9 },
+            () => createBoard(3)
+        ),
+
+        // Har bir kichik boardning holati:
+        // "", "X", "O", "DRAW"
+        ultimateWinners: Array(9).fill(""),
+
+        // Keyingi yurish qaysi kichik boardda?
+        // -1 = istalgan tugamagan board
+        ultimateActiveBoard: -1
+    };
+}
+
 function GetRemainingSeconds(room)
 {
     if (!room.turnStartedAt)
@@ -534,10 +575,7 @@ async function FinishGame(roomId)
     StopRoomTimer(room);
 
     try {
-        // =================================
         // FRIEND CHECK
-        // =================================
-
         let isFriendGame = false;
 
         if (room.players.length >= 2)
@@ -547,12 +585,15 @@ async function FinishGame(roomId)
 
             isFriendGame = await IsFriends(player1.username, player2.username);
         }
-        // =================================
+        
         // UPDATE STATS + DAILY CHALLENGE
-        // =================================
         await UpdateStats(room, isFriendGame); //  await UpdateStats(room); th
-        await SaveMatch(room);
-        broadcastState(roomId);
+        // await SaveMatch(room);
+        // broadcastState(roomId);
+
+        if (room.mode === "ultimate") broadcastUltimateState(roomId);
+        else broadcastState(roomId);
+        
         broadcastTimer(roomId);
     }
     finally {
@@ -571,7 +612,8 @@ function broadcastOnlineCount()
     });
 }
 
-function broadcastState(roomId) { // broadcast
+function broadcastState(roomId) // broadcast
+{
     const room = rooms[roomId];
     if (!room) return;
     
@@ -586,6 +628,30 @@ function broadcastState(roomId) { // broadcast
     });
 
     room.players.forEach(p => {
+        if (p.ws.readyState === WebSocket.OPEN) {
+            p.ws.send(data);
+        }
+    });
+}
+
+function broadcastUltimateState(roomId)
+{
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const data = JSON.stringify({
+        type: "ultimate_state",
+
+        boards: room.ultimateBoards,
+        boardWinners: room.ultimateWinners,
+        activeBoard: room.ultimateActiveBoard,
+        turn: room.turn,
+        winner: room.winner,
+        winnerCells: room.winnerCells
+    });
+
+    room.players.forEach(p =>
+    {
         if (p.ws.readyState === WebSocket.OPEN) {
             p.ws.send(data);
         }
@@ -608,6 +674,90 @@ function broadcastTimer(roomId) {
     });
 }
 
+/* Ultimate */
+function checkUltimateSmallBoard(board)
+{
+    const wins = [
+        [0, 1, 2],
+        [3, 4, 5],
+        [6, 7, 8],
+
+        [0, 3, 6],
+        [1, 4, 7],
+        [2, 5, 8],
+
+        [0, 4, 8],
+        [2, 4, 6]
+    ];
+
+    for (const w of wins)
+    {
+        const a = w[0];
+        const b = w[1];
+        const c = w[2];
+
+        if (board[a] !== "" && board[a] === board[b] && board[a] === board[c])
+        {
+            return {
+                winner: board[a],
+                cells: w
+            };
+        }
+    }
+
+    if (board.every(cell => cell !== ""))
+    {
+        return {
+            winner: "DRAW",
+            cells: []
+        };
+    }
+
+    return {
+        winner: "",
+        cells: []
+    };
+}
+
+function checkUltimateWinner(room)
+{
+    const winners = room.ultimateWinners;
+
+    const wins = [
+        [0, 1, 2],
+        [3, 4, 5],
+        [6, 7, 8],
+
+        [0, 3, 6],
+        [1, 4, 7],
+        [2, 5, 8],
+
+        [0, 4, 8],
+        [2, 4, 6]
+    ];
+
+    for (const w of wins)
+    {
+        const a = w[0];
+        const b = w[1];
+        const c = w[2];
+
+        if (winners[a] !== "" && winners[a] !== "DRAW" && winners[a] === winners[b] && winners[a] === winners[c])
+        {
+            room.winner = winners[a];
+            room.winnerCells = w;
+            return;
+        }
+    }
+
+    // Barcha kichik boardlar tugagan
+    if (winners.every(x => x !== ""))
+    {
+        room.winner = "DRAW";
+        room.winnerCells = [];
+    }
+}
+/**/
 function checkWinner(room) {
     if (room.finishing) return;  //***///
     
@@ -2175,22 +2325,31 @@ wss.on("connection", ws => {
                     roomId = GenerateCode();
                 } while (rooms[roomId]);
 
+                const mode = data.mode || "classic";
+                
                 let boardSize = 3;
                 let winLength = 3;
                 
-                if (data.mode === "4x4") {
+                if (mode === "4x4") {
                     boardSize = 4;
                     winLength = 3;
                 }
-                else if (data.mode === "5x5") {
+                else if (mode === "5x5") {
                     boardSize = 5;
                     winLength = 4;
                 }
+
+                if (mode === "ultimate") {
+                    rooms[roomId] = createUltimateRoom();
+                }
+                else {
+                    rooms[roomId] = createRoom(boardSize, winLength);
+                }
                 
-                rooms[roomId] = createRoom(boardSize, winLength);
+                // rooms[roomId] = createRoom(boardSize, winLength);
                 // rooms[roomId] = createRoom();
                 rooms[roomId].name = roomName;
-                rooms[roomId].mode = data.mode || "classic"; /// 
+                rooms[roomId].mode = mode;
                 rooms[roomId].password = password;
                 rooms[roomId].host = ws.username;
                 rooms[roomId].gameActive = false;
@@ -2206,11 +2365,12 @@ wss.on("connection", ws => {
                     symbol: "X",
                     roomName: roomName,
                     hasPassword: password.length > 0,
-                    mode: data.mode || "classic",
-                    boardSize: boardSize,
-                    winLength: winLength
+                    mode: mode,
+                    boardSize: rooms[roomId].boardSize,
+                    winLength: rooms[roomId].winLength
                 }));
 
+                // broadcastUltimateState(roomId); ??
                 broadcastState(roomId); // add
                 BroadcastRoomList();
             }
@@ -2289,8 +2449,9 @@ wss.on("connection", ws => {
                     // broadcastState(roomId);
                     broadcastTimer(roomId);
                 }
-                
-                broadcastState(roomId);
+
+                if (room.mode === "ultimate") broadcastUltimateState(roomId);
+                else broadcastState(roomId);
                 BroadcastRoomList();
             }
 
@@ -2428,7 +2589,11 @@ wss.on("connection", ws => {
                     }
                     while (rooms[roomId]);
 
-                    rooms[roomId] = createRoom(boardSize, winLength);
+                    if (mode === "ultimate") {
+                        rooms[roomId] = createUltimateRoom();
+                    }
+                    else rooms[roomId] = createRoom(boardSize, winLength);
+                    
                     rooms[roomId].mode = mode;
                     rooms[roomId].gameActive = true;
                     
@@ -2469,7 +2634,11 @@ wss.on("connection", ws => {
 
                     // START GAME
                     StartRoomTimer(roomId); // ch order
-                    broadcastState(roomId);  // ch order
+                    // broadcastState(roomId);  // ch order
+
+                    if (room.mode === "ultimate") broadcastUltimateState(roomId);
+                    else broadcastState(roomId);
+                    
                     broadcastTimer(roomId);
                     BroadcastRoomList();
                 }
@@ -2543,6 +2712,9 @@ wss.on("connection", ws => {
                 const room = rooms[data.roomId];
                 
                 if (!room) return;
+                // ULTIMATE alohida move handlerga o'tadi
+                if (room.mode === "ultimate") return;
+                
                 if (room.turn !== data.symbol) return;
                 if (room.board[data.index] !== "") return;
                 if (room.winner !== "") return;
@@ -2573,6 +2745,83 @@ wss.on("connection", ws => {
                 }
                 
                 broadcastState(data.roomId);
+                broadcastTimer(data.roomId);
+            }
+
+            else if (data.type === "ultimate_move")
+            {
+                const room = rooms[data.roomId];
+                if (!room) return;
+                if (room.mode !== "ultimate") return;
+                if (!room.gameActive) return;
+                if (room.finishing) return;
+                if (room.winner !== "") return;
+                if (room.turn !== data.symbol) return;
+                
+                const boardIndex = Number(data.boardIndex);
+                const cellIndex = Number(data.cellIndex);
+                
+                if (!Number.isInteger(boardIndex) || boardIndex < 0 || boardIndex > 8)
+                    return;
+            
+                if (!Number.isInteger(cellIndex) || cellIndex < 0 || cellIndex > 8)
+                    return;
+            
+                // Qaysi kichik boardga yurish majburiy?
+                if (room.ultimateActiveBoard !== -1 && boardIndex !== room.ultimateActiveBoard) {
+                    return;
+                }
+            
+                // Bu kichik board allaqachon tugagan
+                if (room.ultimateWinners[boardIndex] !== "" ) {
+                    return;
+                }
+                
+                const board = room.ultimateBoards[boardIndex];
+            
+                // Katak band
+                if (board[cellIndex] !== "")
+                    return;
+            
+                // MOVE
+                board[cellIndex] = data.symbol;
+                
+                // Kichik board winneri
+                const smallResult = checkUltimateSmallBoard(board);
+                if (smallResult.winner !== "") {
+                    room.ultimateWinners[boardIndex] = smallResult.winner;
+                }
+            
+                // Katta board winneri
+                checkUltimateWinner(room);
+                
+                // GAME FINISHED?
+                if (room.winner !== "")
+                {
+                    await FinishGame(data.roomId);
+            
+                    broadcastUltimateState(data.roomId);
+                    broadcastTimer(data.roomId);
+                    return;
+                }
+            
+                // NEXT TURN
+                room.turn = data.symbol === "X" ? "O" : "X";
+                
+                // Keyingi player qaysi boardda o'ynaydi?
+                // Hozirgi cellIndex = keyingi board indexi
+                if (room.ultimateWinners[cellIndex] === "") {
+                    room.ultimateActiveBoard = cellIndex;
+                }
+                else
+                {
+                    // Belgilangan board tugagan.
+                    // Istalgan tugamagan boardga yurishi mumkin.
+                    room.ultimateActiveBoard = -1;
+                }
+            
+                ResetRoomTimer(room);
+                broadcastUltimateState(data.roomId);
                 broadcastTimer(data.roomId);
             }
 
@@ -2696,7 +2945,9 @@ wss.on("connection", ws => {
                     opponent: room.players.find(p => p.username !== player.username)?.username || ""
                 }));
             
-                broadcastState(data.roomId);
+                // broadcastState(data.roomId);
+                if (room.mode === "ultimate") broadcastUltimateState(data.roomId);
+                else broadcastState(data.roomId);
                 broadcastTimer(data.roomId);
             }
 
@@ -2710,20 +2961,29 @@ wss.on("connection", ws => {
                 // Ikkalasi ham bosgan
                 if (room.rematchPlayers.length >= 2)
                 {
-                    room.board = createBoard(room.boardSize);
+                    if (room.mode === "ultimate")
+                    {
+                        room.ultimateBoards =
+                            Array.from(
+                                { length: 9 },
+                                () => createBoard(3)
+                            );
+                    
+                        room.ultimateWinners = Array(9).fill("");
+                        room.ultimateActiveBoard = -1;
+                    }
+                    else room.board = createBoard(room.boardSize);
+                    
                     room.turn = "X";
                     room.winner = "";
-
-                    // StartTurnTimer(roomId); roomId - ?, data.roomId - !
-                    // ResetRoomTimer(room);
-                    
                     room.winnerCells = [];
                     room.rematchPlayers = [];
-
                     room.finishing = false;
 
                     StartRoomTimer(data.roomId); // not reset
-                    broadcastState(data.roomId);
+                    if (room.mode === "ultimate") broadcastUltimateState(data.roomId);
+                    else broadcastState(data.roomId);
+                    
                     broadcastTimer(data.roomId);
 
                     room.players.forEach(p => {
