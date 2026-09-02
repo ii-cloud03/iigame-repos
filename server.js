@@ -567,38 +567,22 @@ async function HandleTelegramMessage(message)
                     chat_id: chatId,
                     text:
                         "✅ Account successfully linked!\n\n" +
-                        "Game account: @" +
+                        "Game account: " +
                         username +
                         "\n\n" +
                         "Endi Telegram Stars orqali Gems sotib olishingiz mumkin."
                 }
             );
 
-            console.log(
-                "✅ TELEGRAM ACCOUNT LINKED:",
-                username,
-                telegramUserId
-            );
-
             /*
              * USER ONLINE BO'LSA GAMEGA HAM XABAR
              */
-            const gameWs =
-                onlineUsers.get(username);
+            const gameWs = onlineUsers.get(username);
 
-            if (
-                gameWs &&
-                gameWs.readyState === WebSocket.OPEN
-            )
+            if (gameWs && gameWs.readyState === WebSocket.OPEN)
             {
-                gameWs.send(
-                    JSON.stringify({
-                        type:
-                            "telegram_link_success"
-                    })
-                );
+                gameWs.send(JSON.stringify({type: "telegram_link_success"}));
             }
-            
             return;
         }
 
@@ -814,6 +798,7 @@ async function AddPurchasedGems(username, gems)
             if (!user) return user;
             const currentGems = Number(user.gems || 0);
             user.gems = currentGems + gemsAmount;
+            user.coins = user.coins + gemsAmount;    /////////////////
             return user;
         }
     );
@@ -976,7 +961,7 @@ async function CreateTelegramGemPayment(ws, data)
 const TELEGRAM_GEMS_PACKAGES = {
     gems_100: {
         gems: 100,
-        stars: 50,
+        stars: 0,
         title: "100 Gems",
         description: "100 Gems for TicTacToe"
     },
