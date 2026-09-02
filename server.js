@@ -468,7 +468,7 @@ async function HandleTelegramMessage(message)
                     {
                         chat_id: chatId,
                         text:
-                            "❌ Link code noto‘g‘ri yoki eskirgan."
+                            "❌ Link code noto'g'ri yoki eskirgan."
                     }
                 );
                 return;
@@ -720,13 +720,12 @@ async function HandleTelegramPreCheckout(query)
 async function HandleTelegramSuccessfulPayment(message)
 {
     const payment = message.successful_payment;
+    if (!payment) return;
+    
     const transactionId = String(payment.invoice_payload || "");
-
-    if (!transactionId)
-        return;
+    if (!transactionId) return;
 
     const paymentRef = dbFirebase.ref("telegramPayments/" + transactionId);
-
     const paymentSnap = await paymentRef.once("value");
 
     if (!paymentSnap.exists())
@@ -831,6 +830,146 @@ function SendPaymentUpdateToGame(username, gems)
                 gems: Number(gems)
             })
         );
+    }
+}
+
+async function CreateTelegramGemPayment(ws, data)
+{
+    try
+    {
+        if (!ws || !ws.username)
+        {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({type: "payment_error", message: "Not logged in."}));
+            }
+            return;
+        }
+
+        const packageId = String(data.package || "").trim();
+        const pack = TELEGRAM_GEMS_PACKAGES[packageId];
+        
+        if (!pack)
+        {
+            ws.send(JSON.stringify({
+                type: "payment_error",
+                message: "Invalid Gems package."
+            }));
+
+            return;
+        }
+
+        const username = String(ws.username).trim().toLowerCase();
+        /*
+         * Telegram account linkedmi?
+         */
+        const userRef = dbFirebase.ref("users/" + username);
+        const userSnap = await userRef.once("value");
+        if (!userSnap.exists())
+        {
+            ws.send(JSON.stringify({
+                type: "payment_error",
+                message: "User not found."
+            }));
+            return;
+        }
+
+        const user = userSnap.val();
+        const telegram = user.telegram;
+        if (!telegram || !telegram.chatId)
+        {
+            ws.send(JSON.stringify({
+                type: "payment_error",
+                message: "Telegram account is not linked."
+            }));
+            return;
+        }
+
+        /*
+         * UNIQUE ORDER ID
+         */
+        const transactionId =
+            "tg_" +
+            Date.now() +
+            "_" +
+            crypto.randomBytes(6).toString("hex");
+
+        /*
+         * FIREBASE ORDER
+         */
+        await dbFirebase
+            .ref(
+                "telegramPayments/" +
+                transactionId
+            )
+            .set({
+                username: username,
+                package: packageId,
+                gems: pack.gems,
+                stars: pack.stars,
+
+                telegramUserId: String(telegram.userId || ""),
+                telegramChatId: String(telegram.chatId),
+                status: "pending",
+                telegramPaymentChargeId: "",
+                createdAt: Date.now()
+            });
+
+        /*
+         * TELEGRAM INVOICE
+         */
+        const invoice =
+            await TelegramApi(
+                "sendInvoice",
+                {
+                    chat_id: Number(telegram.chatId),
+                    title: pack.title,
+                    description: pack.description,
+                    payload: transactionId,
+                    provider_token: "",
+                    currency: "XTR",
+                    prices: [
+                        {
+                            label: pack.title,
+                            amount: Number(pack.stars)
+                        }
+                    ]
+                }
+            );
+
+        console.log(
+            "✅ TELEGRAM INVOICE CREATED:",
+            {
+                transactionId,
+                username,
+                packageId,
+                gems: pack.gems,
+                stars: pack.stars
+            }
+        );
+
+        ws.send(
+            JSON.stringify({
+                type: "telegram_payment_created",
+                transactionId: transactionId,
+                package: packageId,
+                gems: pack.gems,
+                stars: pack.stars
+            })
+        );
+    }
+    catch (error)
+    {
+        console.error("CREATE TELEGRAM PAYMENT ERROR:", error);
+
+        if (ws && ws.readyState === WebSocket.OPEN)
+        {
+            ws.send(
+                JSON.stringify({
+                    type: "payment_error",
+                    message: "Could not create Telegram payment."
+                })
+            );
+        }
     }
 }
 
@@ -2231,6 +2370,11 @@ wss.on("connection", ws => {
                     console.error("TELEGRAM LINK ERROR:", error);
                     ws.send(JSON.stringify({type: "telegram_link_error", message: "Could not create Telegram link."}));
                 }
+            }
+
+            else if (data.type === "telegram_buy_gems")
+            {
+                await CreateTelegramGemPayment(ws, data);
             }
 
             else if (data.type === "buy_shop_item")
