@@ -1,14 +1,11 @@
 const express = require("express");
-
 const WebSocket = require("ws");
-
 const http = require("http");
+const crypto = require("crypto");
 
 /////
 const bcrypt = require("bcryptjs"); ////
-
 const app = express();
-
 const server = http.createServer(app);
 
 const wss = new WebSocket.Server({
@@ -297,7 +294,6 @@ let matchmakingQueue = [];
 const admin = require("firebase-admin");
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-
 serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
 
 admin.initializeApp({
@@ -311,6 +307,326 @@ dbFirebase.ref("test").set({ message: "Hello Firebase"})
 .then(() => console.log("Firebase OK"))
 .catch(err => console.log("Firebase Error:", err));
 //// firebase ///
+
+const TELEGRAM_BOT_TOKEN = process.env.TB_TOKEN || "";
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || "";
+const TELEGRAM_API = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN;
+
+async function TelegramApi(method, params = {})
+{
+    if (!TELEGRAM_BOT_TOKEN)
+    {
+        throw new Error("TELEGRAM_BOT_TOKEN is not configured.");
+    }
+
+    const response = await fetch(
+        TELEGRAM_API + "/" + method,
+        {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(params)
+        }
+    );
+
+    const result = await response.json();
+
+    if (!result.ok) {
+        throw new Error("Telegram API error: " + JSON.stringify(result));
+    }
+
+    return result.result;
+}
+
+async function CreateTelegramGemOrder(username, packageId)
+{
+    const cleanUsername = String(username || "").trim().toLowerCase();
+    const pack = TELEGRAM_GEMS_PACKAGES[packageId];
+    if (!cleanUsername) throw new Error("Username is required.");
+    if (!pack) throw new Error("Invalid Gems package.");
+
+    const transactionId = "tg_" + Date.now() + "_" + crypto.randomBytes(6).toString("hex");
+
+    await dbFirebase
+        .ref("telegramPayments/" + transactionId)
+        .set({
+            username: cleanUsername,
+            package: packageId,
+            gems: pack.gems,
+            stars: pack.stars,
+            status: "pending",
+            telegramPaymentChargeId: "",
+            telegramUserId: "",
+            createdAt: Date.now()
+        });
+
+    return {transactionId, package: pack};
+}
+
+app.post("/telegram/webhook",
+    express.json(),
+    async (req, res) =>
+    {
+        try
+        {
+            const secret = req.headers["x-telegram-bot-api-secret-token"];
+
+            if (TELEGRAM_WEBHOOK_SECRET && secret !== TELEGRAM_WEBHOOK_SECRET) {
+                return res.sendStatus(403);
+            }
+            const update = req.body;
+            await HandleTelegramUpdate(update);
+            res.sendStatus(200);
+        }
+        catch (error)
+        {
+            console.error("TELEGRAM WEBHOOK ERROR:", error);
+            res.sendStatus(500);
+        }
+    }
+);
+
+async function HandleTelegramUpdate(update)
+{
+    if (!update)
+        return;
+
+    if (update.pre_checkout_query)
+    {
+        await HandleTelegramPreCheckout(update.pre_checkout_query);
+        return;
+    }
+
+    if (update.message && update.message.successful_payment)
+    {
+        await HandleTelegramSuccessfulPayment(update.message);
+        return;
+    }
+
+    if (update.message) {
+        await HandleTelegramMessage(update.message);
+    }
+}
+
+async function HandleTelegramPreCheckout(query)
+{
+    try
+    {
+        const payload = String(query.invoice_payload || "");
+        const paymentRef = dbFirebase.ref("telegramPayments/" + payload);
+        const snap = await paymentRef.once("value");
+
+        if (!snap.exists())
+        {
+            await TelegramApi(
+                "answerPreCheckoutQuery",
+                {
+                    pre_checkout_query_id: query.id,
+                    ok: false,
+                    error_message: "Order not found."
+                }
+            );
+            return;
+        }
+
+        const payment = snap.val();
+
+        if (payment.status !== "pending")
+        {
+            await TelegramApi(
+                "answerPreCheckoutQuery",
+                {
+                    pre_checkout_query_id: query.id,
+                    ok: false,
+                    error_message: "This order is no longer available."
+                }
+            );
+            return;
+        }
+
+        if (Number(query.total_amount) !== Number(payment.stars))
+        {
+            await TelegramApi(
+                "answerPreCheckoutQuery",
+                {
+                    pre_checkout_query_id: query.id,
+                    ok: false,
+                    error_message: "Invalid payment amount."
+                }
+            );
+            return;
+        }
+
+        await TelegramApi(
+            "answerPreCheckoutQuery",
+            {
+                pre_checkout_query_id: query.id,
+                ok: true
+            }
+        );
+    }
+    catch (error)
+    {
+        console.error("PRECHECKOUT ERROR:", error);
+
+        await TelegramApi(
+            "answerPreCheckoutQuery",
+            {
+                pre_checkout_query_id: query.id,
+                ok: false,
+                error_message: "Payment could not be processed."
+            }
+        );
+    }
+}
+
+async function HandleTelegramSuccessfulPayment(message)
+{
+    const payment = message.successful_payment;
+    const transactionId = String(payment.invoice_payload || "");
+
+    if (!transactionId)
+        return;
+
+    const paymentRef = dbFirebase.ref("telegramPayments/" + transactionId);
+
+    const paymentSnap = await paymentRef.once("value");
+
+    if (!paymentSnap.exists())
+    {
+        console.error("UNKNOWN TELEGRAM PAYMENT:", transactionId);
+        return;
+    }
+
+    const order = paymentSnap.val();
+    
+    // DUPLICATE PAYMENT HIMOYASI
+    if (order.status === "completed")
+    {
+        console.log("PAYMENT ALREADY COMPLETED:", transactionId);
+        return;
+    }
+
+    if (order.status !== "pending")
+        return;
+
+    // AMOUNT VALIDATION
+    if (Number(payment.total_amount) !== Number(order.stars))
+    {
+        console.error(
+            "PAYMENT AMOUNT MISMATCH:",
+            transactionId
+        );
+
+        await paymentRef.update({
+            status: "amount_mismatch",
+            updatedAt: Date.now()
+        });
+
+        return;
+    }
+    
+    // SAVE TELEGRAM PAYMENT ID
+    await paymentRef.update({
+        telegramPaymentChargeId: payment.telegram_payment_charge_id || "",
+        telegramUserId: String(message.from?.id || ""),
+        status: "paid",
+        paidAt: Date.now()
+    });
+
+    // KEYIN GEMS BERAMIZ
+    await AddPurchasedGems(
+        order.username,
+        order.gems
+    );
+
+    await paymentRef.update({
+        status: "completed",
+        completedAt: Date.now()
+    });
+
+    console.log(
+        "✅ TELEGRAM PAYMENT COMPLETED:",
+        transactionId,
+        order.username,
+        order.gems,
+        "Gems"
+    );
+
+    SendPaymentUpdateToGame(order.username, order.gems);
+}
+
+async function AddPurchasedGems(username, gems)
+{
+    const cleanUsername = String(username).trim().toLowerCase();
+    const gemsAmount = Number(gems);
+
+    if (!cleanUsername || !Number.isSafeInteger(gemsAmount) || gemsAmount <= 0) {
+        throw new Error("Invalid Gems purchase.");
+    }
+
+    const userRef = dbFirebase.ref("users/" + cleanUsername);
+    const snapshot = await userRef.once("value");
+
+    if (!snapshot.exists()) {
+        throw new Error("User not found: " + cleanUsername);
+    }
+
+    await userRef.transaction(
+        user =>
+        {
+            if (!user) return user;
+            const currentGems = Number(user.gems || 0);
+            user.gems = currentGems + gemsAmount;
+            return user;
+        }
+    );
+}
+
+function SendPaymentUpdateToGame(username, gems)
+{
+    const target = onlineUsers.get(String(username).toLowerCase());
+    if (target && target.readyState === WebSocket.OPEN)
+    {
+        target.send(
+            JSON.stringify({
+                type: "gems_purchase_success",
+                gems: Number(gems)
+            })
+        );
+    }
+}
+
+const TELEGRAM_GEMS_PACKAGES = {
+    gems_100: {
+        gems: 100,
+        stars: 50,
+        title: "100 Gems",
+        description: "100 Gems for TicTacToe"
+    },
+
+    gems_250: {
+        gems: 250,
+        stars: 100,
+        title: "250 Gems",
+        description: "250 Gems for TicTacToe"
+    },
+
+    gems_600: {
+        gems: 600,
+        stars: 200,
+        title: "600 Gems",
+        description: "600 Gems for TicTacToe"
+    },
+
+    gems_1500: {
+        gems: 1500,
+        stars: 450,
+        title: "1500 Gems",
+        description: "1500 Gems for TicTacToe"
+    }
+};
 
 function GenerateResetCode()
 {
