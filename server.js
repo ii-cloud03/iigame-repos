@@ -959,9 +959,16 @@ async function CreateTelegramGemPayment(ws, data)
 }
 
 const TELEGRAM_GEMS_PACKAGES = {
+    gems_50: {
+        gems: 50,
+        stars: 25,
+        title: "100 Gems",
+        description: "100 Gems for TicTacToe"
+    },
+    
     gems_100: {
         gems: 100,
-        stars: 1,
+        stars: 50,
         title: "100 Gems",
         description: "100 Gems for TicTacToe"
     },
@@ -974,7 +981,7 @@ const TELEGRAM_GEMS_PACKAGES = {
     },
 
     gems_600: {
-        gems: 600,
+        gems: 550,
         stars: 200,
         title: "600 Gems",
         description: "600 Gems for TicTacToe"
@@ -982,7 +989,7 @@ const TELEGRAM_GEMS_PACKAGES = {
 
     gems_1500: {
         gems: 1500,
-        stars: 450,
+        stars: 500,
         title: "1500 Gems",
         description: "1500 Gems for TicTacToe"
     }
