@@ -798,7 +798,6 @@ async function AddPurchasedGems(username, gems)
             if (!user) return user;
             const currentGems = Number(user.gems || 0);
             user.gems = currentGems + gemsAmount;
-            user.coins = user.coins + gemsAmount;    /////////////////
             return user;
         }
     );
@@ -962,8 +961,8 @@ const TELEGRAM_GEMS_PACKAGES = {
     gems_50: {
         gems: 50,
         stars: 25,
-        title: "100 Gems",
-        description: "100 Gems for TicTacToe"
+        title: "50 Gems",
+        description: "50 Gems for TicTacToe"
     },
     
     gems_100: {
@@ -980,18 +979,18 @@ const TELEGRAM_GEMS_PACKAGES = {
         description: "250 Gems for TicTacToe"
     },
 
-    gems_600: {
+    gems_550: {
         gems: 550,
         stars: 200,
-        title: "600 Gems",
-        description: "600 Gems for TicTacToe"
+        title: "550 Gems",
+        description: "550 Gems for TicTacToe"
     },
 
-    gems_1500: {
-        gems: 1500,
+    gems_1200: {
+        gems: 1200,
         stars: 500,
-        title: "1500 Gems",
-        description: "1500 Gems for TicTacToe"
+        title: "1200 Gems",
+        description: "1200 Gems for TicTacToe"
     }
 };
 
