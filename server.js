@@ -2478,6 +2478,7 @@ wss.on("connection", ws => {
                     username: user.username,
                     rating: user.rating || 1000,
                     coins: user.coins || 0,
+                    gems: user.gems || 0,
                     wins: wins,
                     games: games,
                     winRate: games
