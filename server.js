@@ -1308,7 +1308,7 @@ const TELEGRAM_GEMS_PACKAGES = {
     }
 };
 
-const COIN_GEM_PACKAGES = {
+const COIN_PACKAGES = {
     coins_60: {
         coins: 60,
         gems: 5
