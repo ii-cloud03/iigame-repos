@@ -2461,7 +2461,7 @@ wss.on("connection", ws => {
                 await CreateTelegramGemPayment(ws, data);
             }
 
-            else if (data.type === "telegram_buy_coins")
+            else if (data.type === "buy_coins")
             {
                 await BuyCoinsWithGems(ws, data);
             }
