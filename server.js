@@ -608,43 +608,43 @@ async function HandleTelegramMessage(message)
                 return;
             }
 
-        if (text === "/paysupport")
-        {
+            if (text === "/paysupport")
+            {
+                await TelegramApi(
+                    "sendMessage",
+                    {
+                        chat_id: chatId,
+                        text:
+                            "💬 Payment support\n\n" +
+                            "Agar Gems xaridi bo'yicha muammo bo'lsa, " +
+                            "o'yindagi username va payment vaqtini yuboring."
+                    }
+                );
+            
+                return;
+            }
+            
+            // Oddiy xabar
             await TelegramApi(
                 "sendMessage",
                 {
                     chat_id: chatId,
                     text:
-                        "💬 Payment support\n\n" +
-                        "Agar Gems xaridi bo'yicha muammo bo'lsa, " +
-                        "o'yindagi username va payment vaqtini yuboring."
+                        "Game account: " +
+                        username +
+                        "\n\n" +
+                        "/start — account ulash\n" +
+                        "/paysupport — payment support"
                 }
             );
-        
-            return;
-        }
-        /*
-         * Oddiy xabar
-         */
-        await TelegramApi(
-            "sendMessage",
-            {
-                chat_id: chatId,
-                text:
-                    "✅ Account successfully linked!\n\n" +
-                    "Game account: " +
-                    username +
-                    "\n\n" +
-                    "Endi Telegram Stars orqali Gems sotib olishingiz mumkin."
-            }
-        );
 
-        if (gameWs && gameWs.readyState === WebSocket.OPEN)
-        {
-            gameWs.send(JSON.stringify({
-                type: "telegram_link_success",
-                paymentStarted: false
-            }));
+            if (gameWs && gameWs.readyState === WebSocket.OPEN)
+            {
+                gameWs.send(JSON.stringify({
+                    type: "telegram_link_success",
+                    paymentStarted: false
+                }));
+            }
         }
     }
     catch (error)
