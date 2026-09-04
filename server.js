@@ -607,6 +607,8 @@ async function HandleTelegramMessage(message)
                 }
                 return;
             }
+            return;
+        }
 
             if (text === "/paysupport")
             {
@@ -645,7 +647,6 @@ async function HandleTelegramMessage(message)
                     paymentStarted: false
                 }));
             }
-        }
     }
     catch (error)
     {
