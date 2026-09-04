@@ -1978,7 +1978,7 @@ async function UpdateStats(room, isFriendGame = false)
 const SHOP_SKINS = {
     default: 0,
     amethyst: 8500,
-    crystal: 5000,
+    crystal: 12000,
     cyberpunk: 5000,
     dark: 6000,
     emerald: 8500,
