@@ -946,6 +946,127 @@ async function CreateTelegramGemPayment(ws, data)
     }
 }
 
+async function CreateTelegramPaymentLink(
+    ws,
+    packageId
+)
+{
+    try
+    {
+        if (!ws || !ws.username)
+        {
+            return {
+                success: false,
+                error: "Not logged in."
+            };
+        }
+
+        const pack =
+            TELEGRAM_GEMS_PACKAGES[packageId];
+
+        if (!pack)
+        {
+            return {
+                success: false,
+                error: "Invalid Gems package."
+            };
+        }
+
+        const username =
+            String(ws.username)
+                .trim()
+                .toLowerCase();
+
+        const userRef =
+            dbFirebase.ref(
+                "users/" + username
+            );
+
+        const userSnap =
+            await userRef.once("value");
+
+        if (!userSnap.exists())
+        {
+            return {
+                success: false,
+                error: "User not found."
+            };
+        }
+
+        const user =
+            userSnap.val();
+
+        /*
+         * ALREADY LINKED
+         */
+        if (
+            user.telegram &&
+            user.telegram.chatId
+        )
+        {
+            return {
+                success: true,
+                linked: true
+            };
+        }
+
+        /*
+         * NEW LINK CODE
+         */
+        const code =
+            GenerateTelegramLinkCode();
+
+        const now =
+            Date.now();
+
+        const expiresAt =
+            now + 10 * 60 * 1000;
+
+        await dbFirebase
+            .ref(
+                "telegramLinkCodes/" +
+                code
+            )
+            .set({
+                username: username,
+                purpose: "payment",
+                package: packageId,
+                createdAt: now,
+                expiresAt: expiresAt
+            });
+
+        const botUsername =
+            process.env.TELEGRAM_BOT_USERNAME;
+
+        const link =
+            "https://t.me/" +
+            botUsername +
+            "?start=" +
+            code;
+
+        return {
+            success: true,
+            linked: false,
+            code: code,
+            link: link,
+            expiresAt: expiresAt
+        };
+    }
+    catch (error)
+    {
+        console.error(
+            "CREATE TELEGRAM PAYMENT LINK ERROR:",
+            error
+        );
+
+        return {
+            success: false,
+            error:
+                "Could not create Telegram payment link."
+        };
+    }
+}
+
 async function BuyCoinsWithGems(ws, data)
 {
     try
@@ -2426,7 +2547,7 @@ wss.on("connection", ws => {
             {
                 if (!ws.username)
                 {
-                    ws.send(JSON.stringify({type: "telegram_link_error", message: "Not logged in."}));
+                    ws.send(JSON.stringify({type: "telegram_link_error", message: "Not logged in"}));
                     return;
                 }
             
@@ -2458,7 +2579,47 @@ wss.on("connection", ws => {
 
             else if (data.type === "telegram_buy_gems")
             {
-                await CreateTelegramGemPayment(ws, data);
+                try
+                {
+                    const packageId = String(data.package || "").trim();
+                    const result = await CreateTelegramPaymentLink(ws, packageId);
+
+                    if (!result.success)
+                    {
+                        ws.send(JSON.stringify({type: "payment_error", message: result.error}));
+                        return;
+                    }
+
+                    // TELEGRAM ALREADY LINKED
+                    if (result.linked)
+                    {
+                        await CreateTelegramGemPayment(ws, data);
+                        ws.send(JSON.stringify({
+                            type: "telegram_open",
+                            url: "https://t.me/" + process.env.TELEGRAM_BOT_USERNAME
+                        }));
+            
+                        return;
+                    }
+            
+                    // TELEGRAM NOT LINKED
+                    ws.send(JSON.stringify({
+                        type: "telegram_link_required",
+                        link: result.link,
+                        code: result.code,
+                        package: packageId,
+                        expiresAt: result.expiresAt
+                    }));
+                }
+                catch (error)
+                {
+                    console.error("TELEGRAM BUY GEMS HANDLER ERROR:", error);
+                    
+                    ws.send(JSON.stringify({
+                        type: "payment_error",
+                        message: "Could not start Telegram payment."
+                    }));
+                }
             }
 
             else if (data.type === "buy_coins")
