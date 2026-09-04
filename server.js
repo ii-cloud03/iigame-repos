@@ -22,13 +22,13 @@ function GenerateDailyChallenge()
 {
     const challenges =
     [
-        {type: "win_games", target: 3, reward: 15},
-        {type: "win_games", target: 5, reward: 25},
-        {type: "play_games", target: 5, reward: 20},
-        {type: "play_games", target: 10, reward: 40},
-        {type: "play_friend", target: 5, reward: 25},
-        {type: "win_friend", target: 3, reward: 30},
-        {type: "draw_games", target: 2, reward: 10}
+        {type: "win_games", target: 3, reward: 8},
+        {type: "win_games", target: 5, reward: 15},
+        {type: "play_games", target: 5, reward: 10},
+        {type: "play_games", target: 10, reward: 20},
+        {type: "play_friend", target: 5, reward: 10},
+        {type: "win_friend", target: 3, reward: 15},
+        {type: "draw_games", target: 2, reward: 5}
     ];
 
     return challenges[Math.floor(Math.random() * challenges.length)];
@@ -755,24 +755,13 @@ async function HandleTelegramSuccessfulPayment(message)
     });
 
     // KEYIN GEMS BERAMIZ
-    await AddPurchasedGems(
-        order.username,
-        order.gems
-    );
+    await AddPurchasedGems(order.username, order.gems);
 
     await paymentRef.update({
         status: "completed",
         completedAt: Date.now()
     });
-
-    console.log(
-        "✅ TELEGRAM PAYMENT COMPLETED:",
-        transactionId,
-        order.username,
-        order.gems,
-        "Gems"
-    );
-
+    
     SendPaymentUpdateToGame(order.username, order.gems);
 }
 
@@ -782,7 +771,7 @@ async function AddPurchasedGems(username, gems)
     const gemsAmount = Number(gems);
 
     if (!cleanUsername || !Number.isSafeInteger(gemsAmount) || gemsAmount <= 0) {
-        throw new Error("Invalid Gems purchase.");
+        throw new Error("Invalid Gems purchase");
     }
 
     const userRef = dbFirebase.ref("users/" + cleanUsername);
@@ -957,6 +946,83 @@ async function CreateTelegramGemPayment(ws, data)
     }
 }
 
+async function BuyCoinsWithGems(ws, data)
+{
+    try
+    {
+        if (!ws || !ws.username)
+        {
+            ws.send(JSON.stringify({type: "currency_error", message: "Not logged in."}));
+            return;
+        }
+
+        const packageId = String(data.package || "").trim();
+        const pack = COIN_PACKAGES[packageId];
+        if (!pack)
+        {
+            ws.send(JSON.stringify({type: "currency_error", message: "Invalid Coins package"}));
+            return;
+        }
+
+        const username = String(ws.username).trim().toLowerCase();
+        const userRef = dbFirebase.ref("users/" + username);
+
+        // ATOMIC TRANSACTION
+        const result = await userRef.transaction(user =>
+        {
+            if (!user) return user;
+            const gems = Number(user.gems || 0);
+            const coins = Number(user.coins || 0);
+            if (!Number.isSafeInteger(gems) || !Number.isSafeInteger(coins)) {
+                return;
+            }
+            
+            if (gems < pack.gems) {
+                return;
+            }
+        
+            user.gems = gems - pack.gems;
+            user.coins = coins + pack.coins;
+            return user;
+        });
+
+        if (!result.committed)
+        {
+            ws.send(JSON.stringify({type: "currency_error", message: "Not enough Gems"}));
+            return;
+        }
+
+        const user = result.snapshot.val();
+        
+        // CLIENTGA NATIJA
+        ws.send(JSON.stringify({
+            type: "coins_purchase_success",
+            package: packageId,
+            spentGems: Number(pack.gems),
+            receivedCoins: Number(pack.coins),
+            gems: Number(user.gems || 0),
+            coins: Number(user.coins || 0)
+        }));
+
+        // PROFILE REFRESH
+        await SendProfile(ws, username);
+        
+        // SHOP DATA REFRESH
+        await SendShopData(ws, username);
+    }
+    catch (error)
+    {
+        console.error("BUY COINS WITH GEMS ERROR:", error);
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: "currency_error",
+                message: "Coins purchase failed."
+            }));
+        }
+    }
+}
+
 const TELEGRAM_GEMS_PACKAGES = {
     gems_50: {
         gems: 50,
@@ -991,6 +1057,33 @@ const TELEGRAM_GEMS_PACKAGES = {
         stars: 500,
         title: "1200 Gems",
         description: "1200 Gems for TicTacToe"
+    }
+};
+
+const COIN_GEM_PACKAGES = {
+    coins_60: {
+        coins: 60,
+        gems: 5
+    },
+
+    coins_130: {
+        coins: 130,
+        gems: 10
+    },
+
+    coins_200: {
+        coins: 200,
+        gems: 15
+    },
+
+    coins_540: {
+        coins: 540,
+        gems: 40
+    },
+
+    coins_1400: {
+        coins: 1400,
+        gems: 100
     }
 };
 
@@ -1555,7 +1648,7 @@ async function UpdateStats(room, isFriendGame = false)
         {
             await dbFirebase.ref("users/" + p.username.toLowerCase()).update({
                 draws: admin.database.ServerValue.increment(1),
-                coins: admin.database.ServerValue.increment(4)
+                coins: admin.database.ServerValue.increment(0)
             });
 
             // last5
@@ -2110,7 +2203,7 @@ wss.on("connection", ws => {
                     dailyChallengeDate: getToday(),
                     dailyRewardClaimed: false,
                     dailyRewardDate: getToday(),
-                    dailyRewardCoins: 12,
+                    dailyRewardCoins: 5,
                     
                     last5: [],
                 
@@ -2204,7 +2297,7 @@ wss.on("connection", ws => {
 
                 if (user.dailyRewardDate === undefined) updates.dailyRewardDate = getToday();
                 if (user.dailyRewardClaimed === undefined) updates.dailyRewardClaimed = false;
-                if (user.dailyRewardCoins === undefined) updates.dailyRewardCoins = 12;
+                if (user.dailyRewardCoins === undefined) updates.dailyRewardCoins = 5;
                 
                 if (user.last5 === undefined) updates.last5 = [];
                 
@@ -2368,6 +2461,11 @@ wss.on("connection", ws => {
                 await CreateTelegramGemPayment(ws, data);
             }
 
+            else if (data.type === "buy_coins")
+            {
+                await BuyCoinsWithGems(ws, data);
+            }
+
             else if (data.type === "buy_shop_item")
             {
                 await BuyShopItem(ws, data);
@@ -2440,7 +2538,7 @@ wss.on("connection", ws => {
                     return;
             
                 // REWARD
-                const reward = user.dailyRewardCoins || 12;
+                const reward = user.dailyRewardCoins || 5;
                 const newCoins = (user.coins || 0) + reward;
                 await ref.update({coins: newCoins, dailyRewardClaimed: true});
             
