@@ -550,8 +550,7 @@ async function HandleTelegramMessage(message)
                 telegram: {
                     userId: String(telegramUserId),
                     chatId: String(chatId),
-                    username:
-                        message.from.username || "",
+                    username: message.from.username || "",
                     linkedAt: Date.now()
                 }
             });
@@ -561,31 +560,69 @@ async function HandleTelegramMessage(message)
              */
             await codeRef.remove();
 
+            const gameWs = onlineUsers.get(username);
+
+            if (linkData.purpose === "payment")
+            {
+                const packageId = String(linkData.package || "").trim();
+
+                try { 
+                    await TelegramApi(
+                        "sendMessage",
+                        {
+                            chat_id: chatId,
+                            text:
+                                "✅ Account successfully linked!\n\n" +
+                                "Gems payment invoice tayyorlanmoqda..."
+                        }
+                    );
+
+                    await CreateTelegramGemPayment(gameWs, {package: packageId});
+
+                    // USER ONLINE BO'LSA GAMEGA HAM XABAR
+                    if (gameWs && gameWs.readyState === WebSocket.OPEN) {
+                        gameWs.send(JSON.stringify({type: "telegram_link_success", paymentStarted: true}));
+                    }
+                }
+                catch (error)
+                {
+                    console.error("AUTO PAYMENT AFTER TELEGRAM LINK ERROR:", error);
+
+                    await TelegramApi(
+                        "sendMessage",
+                        {
+                            chat_id: chatId,
+                            text:
+                                "❌ Telegram linked, but payment could not be started."
+                        }
+                    );
+            
+                    if (gameWs && gameWs.readyState === WebSocket.OPEN)
+                    {
+                        gameWs.send(JSON.stringify({
+                            type: "payment_error",
+                            message: "Telegram linked, but payment could not be started."
+                        }));
+                    }
+                }
+                return;
+            }
+
+        if (text === "/paysupport")
+        {
             await TelegramApi(
                 "sendMessage",
                 {
                     chat_id: chatId,
                     text:
-                        "✅ Account successfully linked!\n\n" +
-                        "Game account: " +
-                        username +
-                        "\n\n" +
-                        "Endi Telegram Stars orqali Gems sotib olishingiz mumkin."
+                        "💬 Payment support\n\n" +
+                        "Agar Gems xaridi bo'yicha muammo bo'lsa, " +
+                        "o'yindagi username va payment vaqtini yuboring."
                 }
             );
-
-            /*
-             * USER ONLINE BO'LSA GAMEGA HAM XABAR
-             */
-            const gameWs = onlineUsers.get(username);
-
-            if (gameWs && gameWs.readyState === WebSocket.OPEN)
-            {
-                gameWs.send(JSON.stringify({type: "telegram_link_success"}));
-            }
+        
             return;
         }
-
         /*
          * Oddiy xabar
          */
@@ -594,9 +631,21 @@ async function HandleTelegramMessage(message)
             {
                 chat_id: chatId,
                 text:
-                    "/start to connect account"
+                    "✅ Account successfully linked!\n\n" +
+                    "Game account: " +
+                    username +
+                    "\n\n" +
+                    "Endi Telegram Stars orqali Gems sotib olishingiz mumkin."
             }
         );
+
+        if (gameWs && gameWs.readyState === WebSocket.OPEN)
+        {
+            gameWs.send(JSON.stringify({
+                type: "telegram_link_success",
+                paymentStarted: false
+            }));
+        }
     }
     catch (error)
     {
@@ -665,6 +714,20 @@ async function HandleTelegramPreCheckout(query)
             return;
         }
 
+        if (query.currency !== "XTR")
+        {
+            await TelegramApi(
+                "answerPreCheckoutQuery",
+                {
+                    pre_checkout_query_id: query.id,
+                    ok: false,
+                    error_message: "Invalid currency."
+                }
+            );
+
+            return;
+        }
+
         if (Number(query.total_amount) !== Number(payment.stars))
         {
             await TelegramApi(
@@ -675,6 +738,20 @@ async function HandleTelegramPreCheckout(query)
                     error_message: "Invalid payment amount."
                 }
             );
+            return;
+        }
+
+        if (String(query.from.id) !== String(payment.telegramUserId))
+        {
+            await TelegramApi(
+                "answerPreCheckoutQuery",
+                {
+                    pre_checkout_query_id: query.id,
+                    ok: false,
+                    error_message: "Telegram account mismatch."
+                }
+            );
+
             return;
         }
 
@@ -720,15 +797,27 @@ async function HandleTelegramSuccessfulPayment(message)
 
     const order = paymentSnap.val();
     
-    // DUPLICATE PAYMENT HIMOYASI
+    // DUPLICATE PAYMENT HIMOYASI  ?!
+
+    // ALLAQACHON YAKUNLANGAN
     if (order.status === "completed")
     {
         console.log("PAYMENT ALREADY COMPLETED:", transactionId);
         return;
     }
 
-    if (order.status !== "pending")
-        return;
+    // PAYMENTNI TEKSHIRISH
+        if (payment.currency !== "XTR")
+        {
+            console.error(
+                "INVALID TELEGRAM CURRENCY:",
+                transactionId
+            );
+            return;
+        }
+
+    // if (order.status !== "pending")
+    //     return;
 
     // AMOUNT VALIDATION
     if (Number(payment.total_amount) !== Number(order.stars))
@@ -745,14 +834,48 @@ async function HandleTelegramSuccessfulPayment(message)
 
         return;
     }
+
+    if (String(message.from?.id || "") !== String(order.telegramUserId || "")) {
+        console.error("PAYMENT TELEGRAM USER MISMATCH:", transactionId);
+        await paymentRef.update({
+            status: "user_mismatch",
+            updatedAt: Date.now()
+        });
+        
+        return;
+    }
+
+    // PENDING -> DELIVERING ATOMIC CLAIM
+        const claimResult =
+            await paymentRef.transaction(orderData =>
+            {
+                if (!orderData)
+                    return orderData;
+
+                if (orderData.status !== "pending")
+                    return;
+
+                orderData.status = "delivering";
+                orderData.telegramPaymentChargeId =
+                    payment.telegram_payment_charge_id || "";
+                orderData.paidAt = Date.now();
+
+                return orderData;
+            });
+
+        if (!claimResult.committed)
+        {
+            console.log("PAYMENT ALREADY CLAIMED:", transactionId);
+            return;
+        }
     
-    // SAVE TELEGRAM PAYMENT ID
-    await paymentRef.update({
-        telegramPaymentChargeId: payment.telegram_payment_charge_id || "",
-        telegramUserId: String(message.from?.id || ""),
-        status: "paid",
-        paidAt: Date.now()
-    });
+    // // SAVE TELEGRAM PAYMENT ID
+    // await paymentRef.update({
+    //     telegramPaymentChargeId: payment.telegram_payment_charge_id || "",
+    //     telegramUserId: String(message.from?.id || ""),
+    //     status: "paid",
+    //     paidAt: Date.now()
+    // });
 
     // KEYIN GEMS BERAMIZ
     await AddPurchasedGems(order.username, order.gems);
@@ -810,52 +933,57 @@ async function CreateTelegramGemPayment(ws, data)
 {
     try
     {
-        if (!ws || !ws.username)
+        let username = "";
+
+        if (ws && ws.username)
         {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({type: "payment_error", message: "Not logged in."}));
-            }
-            return;
+            username = String(ws.username).trim().toLowerCase();
         }
+
+        if (!username && data.username)
+        {
+            username = String(data.username).trim().toLowerCase();
+        }
+
+        if (!username)
+            throw new Error("Username is required.");
 
         const packageId = String(data.package || "").trim();
         const pack = TELEGRAM_GEMS_PACKAGES[packageId];
         
         if (!pack)
-        {
-            ws.send(JSON.stringify({
-                type: "payment_error",
-                message: "Invalid Gems package."
-            }));
-
-            return;
-        }
-
-        const username = String(ws.username).trim().toLowerCase();
+            throw new Error("Invalid Gems package.");
+        
         /*
          * Telegram account linkedmi?
          */
         const userRef = dbFirebase.ref("users/" + username);
         const userSnap = await userRef.once("value");
         if (!userSnap.exists())
-        {
-            ws.send(JSON.stringify({
-                type: "payment_error",
-                message: "User not found."
-            }));
-            return;
-        }
+            throw new Error("User not found.");
+        // if (!userSnap.exists())
+        // {
+        //     ws.send(JSON.stringify({
+        //         type: "payment_error",
+        //         message: "User not found."
+        //     }));
+        //     return;
+        // }
 
         const user = userSnap.val();
         const telegram = user.telegram;
+
         if (!telegram || !telegram.chatId)
-        {
-            ws.send(JSON.stringify({
-                type: "payment_error",
-                message: "Telegram account is not linked."
-            }));
-            return;
-        }
+            throw new Error("Telegram account is not linked.");
+        
+        // if (!telegram || !telegram.chatId)
+        // {
+        //     ws.send(JSON.stringify({
+        //         type: "payment_error",
+        //         message: "Telegram account is not linked."
+        //     }));
+        //     return;
+        // }
 
         /*
          * UNIQUE ORDER ID
@@ -890,7 +1018,7 @@ async function CreateTelegramGemPayment(ws, data)
         /*
          * TELEGRAM INVOICE
          */
-        const invoice =
+        // const invoice =
             await TelegramApi(
                 "sendInvoice",
                 {
@@ -920,29 +1048,27 @@ async function CreateTelegramGemPayment(ws, data)
             }
         );
 
-        ws.send(
-            JSON.stringify({
-                type: "telegram_payment_created",
-                transactionId: transactionId,
-                package: packageId,
-                gems: pack.gems,
-                stars: pack.stars
-            })
-        );
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(
+                JSON.stringify({
+                    type: "telegram_payment_created",
+                    transactionId: transactionId,
+                    package: packageId,
+                    gems: pack.gems,
+                    stars: pack.stars
+                })
+            );
+        }
     }
     catch (error)
     {
         console.error("CREATE TELEGRAM PAYMENT ERROR:", error);
 
-        if (ws && ws.readyState === WebSocket.OPEN)
-        {
-            ws.send(
-                JSON.stringify({
-                    type: "payment_error",
-                    message: "Could not create Telegram payment."
-                })
-            );
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({type: "payment_error", message: error.message || "Could not create Telegram payment."}));
         }
+
+        throw error;
     }
 }
 
