@@ -3191,7 +3191,9 @@ wss.on("connection", ws => {
                         joined: profile.createdAt || "",
                         lastOnline: profile.lastSeen || "",
                         avatar: profile.avatar || "",
-                        status: profile.status || "offline"
+                        status: profile.status || "offline",
+                        lastname: profile.lastName || "",
+                        firstname: profile.firstName || ""
                     }));
                 }
                 catch (err)
